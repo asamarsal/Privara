@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  transpilePackages: ['@privara/shared'],
   webpack: (config, { webpack }) => {
     config.resolve.fallback = { fs: false, net: false, tls: false };
     
