@@ -1,0 +1,22 @@
+{
+    "name":  "privara-workspace",
+    "version":  "1.0.0",
+    "private":  true,
+    "scripts":  {
+                    "build":  "pnpm -r build",
+                    "test":  "pnpm -r test",
+                    "lint":  "pnpm -r lint",
+                    "typecheck":  "pnpm -r typecheck",
+                    "ftso:read":  "npx ts-node scripts/readFtsoPrice.ts"
+                },
+    "devDependencies":  {
+                            "prettier":  "^3.2.5",
+                            "typescript":  "^5.4.5"
+                        },
+    "dependencies":  {
+                         "@types/node":  "^26.1.2",
+                         "dotenv":  "^17.4.2",
+                         "ethers":  "^6.17.0",
+                         "ts-node":  "^10.9.2"
+                     }
+}

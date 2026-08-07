@@ -1,0 +1,27 @@
+{
+  "network": "coston2",
+  "chainId": 114,
+  "deployedAt": "2026-08-03T04:16:28.819Z",
+  "deployBlock": 33565107,
+  "contracts": {
+    "PrivaraVault": "0xA83a1b48eA4b0d255125cA556AcefaF274CCC1A6",
+    "FccVerifier": "0x56a4ab076b49806BDf31c529355067401e3AA572"
+  },
+  "tokens": {
+    "FXRP": "0xa3Bd00D652D0f28D2417339322A51d4Fbe2B22D3",
+    "USDT0": "0xC1A5B41512496B80903D1f32d6dEa3a73212E71F"
+  },
+  "oracle": {
+    "FtsoV2": "0x3d893C53D9e8056135C26C8c638B76C8b60Df726",
+    "xrpUsdFeedId": "0x015852502f55534400000000000000000000000000",
+    "maxDeviationBps": 200
+  },
+  "fcc": {
+    "extensionId": "",
+    "infraMode": "local_mock"
+  },
+  "examples": {
+    "orderCommittedTxHash": "",
+    "orderSettledTxHash": ""
+  }
+}

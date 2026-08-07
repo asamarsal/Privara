@@ -1,0 +1,20 @@
+{
+    "name":  "@privara/shared",
+    "version":  "1.0.0",
+    "main":  "dist/index.js",
+    "types":  "dist/index.d.ts",
+    "scripts":  {
+                    "build":  "tsc",
+                    "lint":  "eslint .",
+                    "typecheck":  "tsc --noEmit",
+                    "test":  "vitest run"
+                },
+    "devDependencies":  {
+                            "typescript":  "^5.4.5",
+                            "vitest":  "^4.1.10"
+                        },
+    "dependencies":  {
+                         "ethers":  "^6.17.0",
+                         "zod":  "^4.4.3"
+                     }
+}
