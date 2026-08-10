@@ -5,7 +5,7 @@ import { TransactionState } from './TransactionState';
 import { parseAbi, parseEther, formatEther, keccak256, toHex, stringToHex } from 'viem';
 import { useNetwork } from '../hooks/useNetwork';
 import { useVaultBalance } from '../hooks/useVaultBalance';
-import { OrderSide, Order, hashOrder, encodeOrderForHashing } from '@privara/shared';
+import { OrderSide, Order, hashOrder, encodeOrderForHashing, OrderType } from '@privara/shared';
 import { saveOrderToHistory } from '../hooks/useActivity';
 import { useToast } from './ToastContext';
 
@@ -13,7 +13,7 @@ const vaultAbi = parseAbi([
   'function commitOrder(bytes32 orderId, uint8 side, address tokenIn, uint256 amountIn, bytes32 encryptedCommitment, uint64 expiry)'
 ]);
 
-export const BuyOrderForm: React.FC = () => {
+export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Limit' }) => {
   const { address, isConnected } = useAccount();
   const { isCorrectNetwork } = useNetwork();
   const { usdt0Balance, refetch } = useVaultBalance();
@@ -21,6 +21,7 @@ export const BuyOrderForm: React.FC = () => {
 
   const [fxrpAmountStr, setFxrpAmountStr] = useState('');
   const [maxPriceStr, setMaxPriceStr] = useState('');
+  const [stopPriceStr, setStopPriceStr] = useState('');
   const [expiryHours, setExpiryHours] = useState('1');
   const [error, setError] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -35,33 +36,49 @@ export const BuyOrderForm: React.FC = () => {
   const [txHash, setTxHash] = useState<string>();
   const [txError, setTxError] = useState<string>();
 
-  const validateInput = (): { fxrpAmount: bigint, maxPrice: bigint } | null => {
+  const validateInput = (): { fxrpAmount: bigint, maxPrice: bigint, stopPrice: bigint } | null => {
     setError('');
-    if (!fxrpAmountStr || !maxPriceStr) return null;
+    if (!fxrpAmountStr) return null;
+    if (orderType === 'Limit' && !maxPriceStr) return null;
+    if (orderType === 'Stop' && (!maxPriceStr || !stopPriceStr)) return null;
 
-    if (fxrpAmountStr.includes('e') || maxPriceStr.includes('e')) {
+    if (fxrpAmountStr.includes('e') || maxPriceStr.includes('e') || stopPriceStr.includes('e')) {
       setError('Scientific notation is not allowed');
       return null;
     }
 
     try {
       const fxrpAmount = parseEther(fxrpAmountStr);
-      const maxPrice = parseEther(maxPriceStr); // Assuming price is scaled by 1e18
+      let maxPrice = 0n;
+      if (orderType !== 'Market') {
+        maxPrice = parseEther(maxPriceStr);
+      }
+      const stopPrice = orderType === 'Stop' ? parseEther(stopPriceStr) : 0n;
 
-      if (fxrpAmount <= 0n || maxPrice <= 0n) {
-        setError('Amounts must be greater than zero');
+      if (fxrpAmount <= 0n) {
+        setError('Amount must be greater than zero');
+        return null;
+      }
+      if (orderType !== 'Market' && maxPrice <= 0n) {
+        setError('Price must be greater than zero');
+        return null;
+      }
+      if (orderType === 'Stop' && stopPrice <= 0n) {
+        setError('Stop price must be greater than zero');
         return null;
       }
 
-      // Calculate estimated quote amount: (fxrpAmount * maxPrice) / 1e18
-      const quoteAmount = (fxrpAmount * maxPrice) / 10n ** 18n;
+      // Calculate estimated quote amount
+      const currentMarketPrice = parseEther("1.0658"); // Mock market price
+      const calcPrice = orderType === 'Market' ? currentMarketPrice : maxPrice;
+      const quoteAmount = (fxrpAmount * calcPrice) / 10n ** 18n;
 
       if (usdt0Balance && usdt0Balance < quoteAmount) {
         setError(`Insufficient USDT0 vault balance. Need ${formatEther(quoteAmount)}`);
         return null;
       }
 
-      return { fxrpAmount, maxPrice };
+      return { fxrpAmount, maxPrice, stopPrice };
     } catch (err) {
       setError('Invalid amount format');
       return null;
@@ -70,10 +87,13 @@ export const BuyOrderForm: React.FC = () => {
 
   const estimatedCost = () => {
     try {
-      if (!fxrpAmountStr || !maxPriceStr) return '0.00';
+      if (!fxrpAmountStr) return '0.00';
       const fAmount = parseEther(fxrpAmountStr);
-      const mPrice = parseEther(maxPriceStr);
-      const quote = (fAmount * mPrice) / 10n ** 18n;
+      let calcPrice = parseEther("1.0658");
+      if (orderType !== 'Market' && maxPriceStr) {
+        calcPrice = parseEther(maxPriceStr);
+      }
+      const quote = (fAmount * calcPrice) / 10n ** 18n;
       return formatEther(quote);
     } catch {
       return '0.00';
@@ -97,14 +117,21 @@ export const BuyOrderForm: React.FC = () => {
       // Create order object using shared schema types
       const orderId = stringToHex(`order-${Date.now()}-${Math.floor(Math.random() * 1000)}`, { size: 32 });
 
+      const orderTypeEnum = orderType === 'Market' ? OrderType.market : orderType === 'Stop' ? OrderType.stop : OrderType.limit;
+      const currentMarketPrice = parseEther("1.0658");
+      const calcPrice = orderType === 'Market' ? currentMarketPrice : validated.maxPrice;
+      const amountIn = (validated.fxrpAmount * calcPrice) / 10n ** 18n;
+
       const order: Order = {
         orderId,
         maker: address,
         side: OrderSide.buy,
         tokenIn: usdt0Address,
         tokenOut: fxrpAddress,
-        amountIn: (validated.fxrpAmount * validated.maxPrice) / 10n ** 18n, // Quote amount we put in
+        amountIn: amountIn, // Quote amount we put in
         limitPrice: validated.maxPrice,
+        orderType: orderTypeEnum,
+        stopPrice: validated.stopPrice,
         expiry: Number(expiry),
         nonce,
         chainId: Number(chainId),
@@ -171,10 +198,11 @@ export const BuyOrderForm: React.FC = () => {
 
   const handlePct = (pct: number) => {
     setSliderVal(pct);
-    if (!usdt0Balance || !maxPriceStr) return;
+    if (!usdt0Balance || (!maxPriceStr && orderType !== 'Market')) return;
     try {
       const budget = (usdt0Balance * BigInt(pct)) / 100n;
-      const price = parseEther(maxPriceStr);
+      const currentMarketPrice = parseEther("1.0658");
+      const price = orderType === 'Market' ? currentMarketPrice : parseEther(maxPriceStr);
       if (price > 0n) {
         const amt = (budget * 10n ** 18n) / price;
         setFxrpAmountStr(parseFloat(formatEther(amt)).toFixed(4));
@@ -267,19 +295,35 @@ export const BuyOrderForm: React.FC = () => {
           ))}
         </div>
 
-      {/* Max Price */}
-      <div>
-        <span style={labelStyle}>Max Price (USDT per FXRP)</span>
-        <input
-          type="text"
-          placeholder="0.00"
-          value={maxPriceStr}
-          onChange={(e) => { setMaxPriceStr(e.target.value); validateInput(); }}
-          style={inputStyle}
-          onFocus={e => e.target.style.borderColor = 'var(--color-accent-primary)'}
-          onBlur={e => e.target.style.borderColor = 'var(--color-border)'}
-        />
-      </div>
+      {orderType === 'Stop' && (
+        <div>
+          <span style={labelStyle}>Stop Price (USDT per FXRP)</span>
+          <input
+            type="text"
+            placeholder="0.00"
+            value={stopPriceStr}
+            onChange={(e) => { setStopPriceStr(e.target.value); validateInput(); }}
+            style={inputStyle}
+            onFocus={e => e.target.style.borderColor = 'var(--color-accent-primary)'}
+            onBlur={e => e.target.style.borderColor = 'var(--color-border)'}
+          />
+        </div>
+      )}
+
+      {orderType !== 'Market' && (
+        <div>
+          <span style={labelStyle}>Max Price (USDT per FXRP)</span>
+          <input
+            type="text"
+            placeholder="0.00"
+            value={maxPriceStr}
+            onChange={(e) => { setMaxPriceStr(e.target.value); validateInput(); }}
+            style={inputStyle}
+            onFocus={e => e.target.style.borderColor = 'var(--color-accent-primary)'}
+            onBlur={e => e.target.style.borderColor = 'var(--color-border)'}
+          />
+        </div>
+      )}
 
       {/* Expiry */}
       <div>
@@ -316,17 +360,18 @@ export const BuyOrderForm: React.FC = () => {
             addToast("Harap hubungkan wallet", "error", "top-right");
             return;
           }
-          const isDisabled = !fxrpAmountStr || !maxPriceStr || !!error || !isCorrectNetwork || txState === 'awaiting_approval' || txState === 'pending';
+          const isDisabled = !fxrpAmountStr || (orderType !== 'Market' && !maxPriceStr) || (orderType === 'Stop' && !stopPriceStr) || !!error || !isCorrectNetwork || txState === 'awaiting_approval' || txState === 'pending';
           if (isDisabled) {
             if (!isCorrectNetwork) addToast("Please switch to Coston2 Network", "error", "top-right");
-            else if (!fxrpAmountStr || !maxPriceStr) addToast("Please enter amount and price", "error", "top-right");
+            else if (!fxrpAmountStr || (orderType !== 'Market' && !maxPriceStr)) addToast("Please enter amount and price", "error", "top-right");
+            else if (orderType === 'Stop' && !stopPriceStr) addToast("Please enter stop price", "error", "top-right");
             else if (error) addToast(error, "error", "top-right");
             else addToast("Transaction in progress", "info", "top-right");
             return;
           }
           setShowConfirmModal(true);
         }}
-        aria-disabled={(!fxrpAmountStr || !maxPriceStr || !!error || !isCorrectNetwork || txState === 'awaiting_approval' || txState === 'pending') ? "true" : "false"}
+        aria-disabled={(!fxrpAmountStr || (orderType !== 'Market' && !maxPriceStr) || (orderType === 'Stop' && !stopPriceStr) || !!error || !isCorrectNetwork || txState === 'awaiting_approval' || txState === 'pending') ? "true" : "false"}
         className="btn-premium-buy"
         style={{
           width: '100%',
@@ -359,11 +404,11 @@ export const BuyOrderForm: React.FC = () => {
             </div>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
               <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>
-              <div><strong>Max Price:</strong> {maxPriceStr || 0} USDT0 per FXRP</div>
+              <div><strong>{orderType === 'Market' ? 'Est. Price' : 'Max Price'}:</strong> {orderType === 'Market' ? '1.0658' : (maxPriceStr || 0)} USDT0 per FXRP</div>
             </div>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
               <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>
-              <div><strong>Total Cost:</strong> ~{(Number(fxrpAmountStr) * Number(maxPriceStr)).toFixed(2)} USDT0</div>
+              <div><strong>{orderType === 'Market' ? 'Est. Total Cost' : 'Total Cost'}:</strong> ~{estimatedCost()} USDT0</div>
             </div>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
               <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>

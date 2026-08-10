@@ -1,8 +1,14 @@
-﻿import { z } from 'zod';
+import { z } from 'zod';
 
 export enum OrderSide {
   buy = 'buy',
   sell = 'sell',
+}
+
+export enum OrderType {
+  limit = 0,
+  market = 1,
+  stop = 2,
 }
 
 export enum OrderStatus {
@@ -20,6 +26,8 @@ export const OrderSchema = z.object({
   tokenOut: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "Must be an EVM address"),
   amountIn: z.bigint(),
   limitPrice: z.bigint(),
+  orderType: z.nativeEnum(OrderType).default(OrderType.limit),
+  stopPrice: z.bigint().optional().default(0n),
   expiry: z.number(),
   nonce: z.bigint(),
   chainId: z.number(),

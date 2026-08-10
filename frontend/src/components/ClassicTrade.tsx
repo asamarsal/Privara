@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { useAccount, useWriteContract } from 'wagmi';
 import { parseEther, formatEther, parseAbi, stringToHex } from 'viem';
-import { hashOrder, Order, OrderSide } from '@privara/shared';
+import { hashOrder, Order, OrderSide, OrderType } from '@privara/shared';
 import { useVaultBalance } from '../hooks/useVaultBalance';
 import { saveOrderToHistory } from '../hooks/useActivity';
 import { TransactionState } from './TransactionState';
@@ -160,6 +160,8 @@ export function ClassicTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
         tokenOut,
         amountIn,
         limitPrice,
+        orderType: OrderType.limit,
+        stopPrice: 0n,
         expiry: Number(expiry),
         nonce,
         chainId: Number(chainId),
@@ -327,69 +329,13 @@ export function ClassicTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
 
             <div style={{ position: 'relative' }}>
               <div
-                onClick={() => setShowPrivacyModal(!showPrivacyModal)}
+                onClick={() => setShowPrivacyModal(true)}
                 style={{ fontSize: '12px', color: 'var(--color-text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'color 0.2s', userSelect: 'none' }}
                 onMouseEnter={e => e.currentTarget.style.color = 'var(--color-accent-primary)'}
                 onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-secondary)'}
               >
                 How private trading works <span>ⓘ</span>
               </div>
-
-              {/* Popover directly below text, no backdrop overlay */}
-              {showPrivacyModal && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: 'calc(100% + 8px)',
-                    right: 0,
-                    width: 'min(360px, calc(100vw - 32px))',
-                    background: 'var(--color-bg-surface)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: '12px',
-                    padding: '16px',
-                    boxShadow: 'var(--shadow-dropdown)',
-                    zIndex: 1000,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '12px'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--color-border)', paddingBottom: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 700, color: 'var(--color-accent-primary)' }}>
-                      <span>🛡️</span> How Private Trading Works
-                    </div>
-                    <button
-                      onClick={() => setShowPrivacyModal(false)}
-                      style={{ background: 'transparent', border: 'none', color: 'var(--color-text-secondary)', fontSize: '14px', cursor: 'pointer', padding: '0 4px' }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '12px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-                    <div style={{ background: 'var(--color-overlay-subtle)', padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
-                      <strong style={{ color: 'var(--color-text-primary)', display: 'block', marginBottom: '2px' }}>1. Local Client Encryption</strong>
-                      Order terms (Limit Price, Amount, Expiry) are encrypted on your local device before submission.
-                    </div>
-
-                    <div style={{ background: 'var(--color-overlay-subtle)', padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
-                      <strong style={{ color: 'var(--color-text-primary)', display: 'block', marginBottom: '2px' }}>2. Confidential Compute (Flare TEE / MPC)</strong>
-                      Matching engine compares encrypted orders inside a secure enclave without leaking data on-chain.
-                    </div>
-
-                    <div style={{ background: 'var(--color-overlay-subtle)', padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
-                      <strong style={{ color: 'var(--color-text-primary)', display: 'block', marginBottom: '2px' }}>3. Fair Settlement with FTSOv2</strong>
-                      Trades settle on-chain on Coston2 using decentralized price feeds. Unmatched orders stay confidential.
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid var(--color-border)' }}>
-                    <Link href="/how-it-works" onClick={() => setShowPrivacyModal(false)} style={{ color: 'var(--color-accent-primary)', fontSize: '11px', textDecoration: 'none', fontWeight: 600 }}>
-                      Read full architecture ↗
-                    </Link>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 

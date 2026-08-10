@@ -1,4 +1,4 @@
-﻿import { OrderSide, Order, MatchResult } from '../schemas';
+import { OrderSide, Order, MatchResult, OrderType } from '../schemas';
 
 const FXRP = '0x1111111111111111111111111111111111111111';
 const USDT0 = '0x2222222222222222222222222222222222222222';
@@ -24,6 +24,8 @@ export const FIXTURE_SELL_ORDER: Order = {
   tokenOut: USDT0,
   amountIn: fxrpAmount,
   limitPrice: sellPrice,
+  orderType: OrderType.limit,
+  stopPrice: 0n,
   expiry: FUTURE_EXPIRY,
   nonce: 1n,
   chainId: 114,
@@ -43,6 +45,8 @@ export const FIXTURE_BUY_ORDER: Order = {
   tokenOut: FXRP,
   amountIn: quoteAmount,
   limitPrice: buyPrice,
+  orderType: OrderType.limit,
+  stopPrice: 0n,
   expiry: FUTURE_EXPIRY,
   nonce: 1n,
   chainId: 114,

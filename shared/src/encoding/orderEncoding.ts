@@ -1,4 +1,4 @@
-﻿import { AbiCoder, getBytes, keccak256 } from 'ethers';
+import { AbiCoder, getBytes, keccak256 } from 'ethers';
 import { Order, OrderSide, MatchResult } from '../schemas';
 
 const abiCoder = AbiCoder.defaultAbiCoder();
@@ -8,10 +8,9 @@ const abiCoder = AbiCoder.defaultAbiCoder();
  * Deterministic for given Order fields.
  */
 export function encodeOrderForHashing(order: Order): Uint8Array {
-  // We represent the side as a uint8: 0 for buy, 1 for sell
   const sideUint8 = order.side === OrderSide.buy ? 0 : 1;
   const encodedHex = abiCoder.encode(
-    ['bytes32', 'address', 'uint8', 'address', 'address', 'uint256', 'uint256', 'uint64', 'uint256', 'uint256', 'address'],
+    ['bytes32', 'address', 'uint8', 'address', 'address', 'uint256', 'uint256', 'uint8', 'uint256', 'uint64', 'uint256', 'uint256', 'address'],
     [
       order.orderId,
       order.maker,
@@ -20,6 +19,8 @@ export function encodeOrderForHashing(order: Order): Uint8Array {
       order.tokenOut,
       order.amountIn,
       order.limitPrice,
+      order.orderType ?? 0,
+      order.stopPrice ?? 0n,
       order.expiry,
       order.nonce,
       order.chainId,

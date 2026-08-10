@@ -5,7 +5,7 @@ import { TransactionState } from './TransactionState';
 import { parseAbi, parseEther, formatEther, stringToHex } from 'viem';
 import { useNetwork } from '../hooks/useNetwork';
 import { useVaultBalance } from '../hooks/useVaultBalance';
-import { OrderSide, Order, hashOrder, encodeOrderForHashing } from '@privara/shared';
+import { OrderSide, Order, hashOrder, encodeOrderForHashing, OrderType } from '@privara/shared';
 import { saveOrderToHistory } from '../hooks/useActivity';
 import { useToast } from './ToastContext';
 
@@ -13,7 +13,7 @@ const vaultAbi = parseAbi([
   'function commitOrder(bytes32 orderId, uint8 side, address tokenIn, uint256 amountIn, bytes32 encryptedCommitment, uint64 expiry)'
 ]);
 
-export const SellOrderForm: React.FC = () => {
+export const SellOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Limit' }) => {
   const { address, isConnected } = useAccount();
   const { isCorrectNetwork } = useNetwork();
   const { fxrpBalance, refetch } = useVaultBalance();
@@ -21,6 +21,7 @@ export const SellOrderForm: React.FC = () => {
 
   const [fxrpAmountStr, setFxrpAmountStr] = useState('');
   const [minPriceStr, setMinPriceStr] = useState('');
+  const [stopPriceStr, setStopPriceStr] = useState('');
   const [expiryHours, setExpiryHours] = useState('1');
   const [error, setError] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -35,21 +36,35 @@ export const SellOrderForm: React.FC = () => {
   const [txHash, setTxHash] = useState<string>();
   const [txError, setTxError] = useState<string>();
 
-  const validateInput = (): { fxrpAmount: bigint, minPrice: bigint } | null => {
+  const validateInput = (): { fxrpAmount: bigint, minPrice: bigint, stopPrice: bigint } | null => {
     setError('');
-    if (!fxrpAmountStr || !minPriceStr) return null;
+    if (!fxrpAmountStr) return null;
+    if (orderType === 'Limit' && !minPriceStr) return null;
+    if (orderType === 'Stop' && (!minPriceStr || !stopPriceStr)) return null;
 
-    if (fxrpAmountStr.includes('e') || minPriceStr.includes('e')) {
+    if (fxrpAmountStr.includes('e') || minPriceStr.includes('e') || stopPriceStr.includes('e')) {
       setError('Scientific notation is not allowed');
       return null;
     }
 
     try {
       const fxrpAmount = parseEther(fxrpAmountStr);
-      const minPrice = parseEther(minPriceStr);
+      let minPrice = 0n;
+      if (orderType !== 'Market') {
+        minPrice = parseEther(minPriceStr);
+      }
+      const stopPrice = orderType === 'Stop' ? parseEther(stopPriceStr) : 0n;
 
-      if (fxrpAmount <= 0n || minPrice <= 0n) {
-        setError('Amounts must be greater than zero');
+      if (fxrpAmount <= 0n) {
+        setError('Amount must be greater than zero');
+        return null;
+      }
+      if (orderType !== 'Market' && minPrice <= 0n) {
+        setError('Price must be greater than zero');
+        return null;
+      }
+      if (orderType === 'Stop' && stopPrice <= 0n) {
+        setError('Stop price must be greater than zero');
         return null;
       }
 
@@ -58,7 +73,7 @@ export const SellOrderForm: React.FC = () => {
         return null;
       }
 
-      return { fxrpAmount, minPrice };
+      return { fxrpAmount, minPrice, stopPrice };
     } catch (err) {
       setError('Invalid amount format');
       return null;
@@ -67,10 +82,13 @@ export const SellOrderForm: React.FC = () => {
 
   const estimatedProceeds = () => {
     try {
-      if (!fxrpAmountStr || !minPriceStr) return '0.00';
+      if (!fxrpAmountStr) return '0.00';
       const fAmount = parseEther(fxrpAmountStr);
-      const mPrice = parseEther(minPriceStr);
-      const quote = (fAmount * mPrice) / 10n ** 18n;
+      let calcPrice = parseEther("1.0658");
+      if (orderType !== 'Market' && minPriceStr) {
+        calcPrice = parseEther(minPriceStr);
+      }
+      const quote = (fAmount * calcPrice) / 10n ** 18n;
       return formatEther(quote);
     } catch {
       return '0.00';
@@ -93,6 +111,8 @@ export const SellOrderForm: React.FC = () => {
 
       const orderId = stringToHex(`order-${Date.now()}-${Math.floor(Math.random() * 1000)}`, { size: 32 });
 
+      const orderTypeEnum = orderType === 'Market' ? OrderType.market : orderType === 'Stop' ? OrderType.stop : OrderType.limit;
+
       const order: Order = {
         orderId,
         maker: address,
@@ -101,6 +121,8 @@ export const SellOrderForm: React.FC = () => {
         tokenOut: usdt0Address,
         amountIn: validated.fxrpAmount,
         limitPrice: validated.minPrice,
+        orderType: orderTypeEnum,
+        stopPrice: validated.stopPrice,
         expiry: Number(expiry),
         nonce,
         chainId: Number(chainId),
@@ -242,17 +264,31 @@ export const SellOrderForm: React.FC = () => {
           ))}
         </div>
 
-      {/* Min Price */}
-      <div>
-        <span style={labelStyle}>Min Price (USDT per FXRP)</span>
-        <input
-          type="text" placeholder="0.00" value={minPriceStr}
-          onChange={(e) => { setMinPriceStr(e.target.value); validateInput(); }}
-          style={inputStyle}
-          onFocus={e => e.target.style.borderColor = 'var(--color-error)'}
-          onBlur={e => e.target.style.borderColor = 'var(--color-border)'}
-        />
-      </div>
+      {orderType === 'Stop' && (
+        <div>
+          <span style={labelStyle}>Stop Price (USDT per FXRP)</span>
+          <input
+            type="text" placeholder="0.00" value={stopPriceStr}
+            onChange={(e) => { setStopPriceStr(e.target.value); validateInput(); }}
+            style={inputStyle}
+            onFocus={e => e.target.style.borderColor = 'var(--color-error)'}
+            onBlur={e => e.target.style.borderColor = 'var(--color-border)'}
+          />
+        </div>
+      )}
+
+      {orderType !== 'Market' && (
+        <div>
+          <span style={labelStyle}>Min Price (USDT per FXRP)</span>
+          <input
+            type="text" placeholder="0.00" value={minPriceStr}
+            onChange={(e) => { setMinPriceStr(e.target.value); validateInput(); }}
+            style={inputStyle}
+            onFocus={e => e.target.style.borderColor = 'var(--color-error)'}
+            onBlur={e => e.target.style.borderColor = 'var(--color-border)'}
+          />
+        </div>
+      )}
 
       {/* Expiry */}
       <div>
@@ -287,17 +323,18 @@ export const SellOrderForm: React.FC = () => {
             addToast("Harap hubungkan wallet", "error", "top-right");
             return;
           }
-          const isDisabled = !fxrpAmountStr || !minPriceStr || !!error || !isCorrectNetwork || txState === 'awaiting_approval' || txState === 'pending';
+          const isDisabled = !fxrpAmountStr || (orderType !== 'Market' && !minPriceStr) || (orderType === 'Stop' && !stopPriceStr) || !!error || !isCorrectNetwork || txState === 'awaiting_approval' || txState === 'pending';
           if (isDisabled) {
             if (!isCorrectNetwork) addToast("Please switch to Coston2 Network", "error", "top-right");
-            else if (!fxrpAmountStr || !minPriceStr) addToast("Please enter amount and price", "error", "top-right");
+            else if (!fxrpAmountStr || (orderType !== 'Market' && !minPriceStr)) addToast("Please enter amount and price", "error", "top-right");
+            else if (orderType === 'Stop' && !stopPriceStr) addToast("Please enter stop price", "error", "top-right");
             else if (error) addToast(error, "error", "top-right");
             else addToast("Transaction in progress", "info", "top-right");
             return;
           }
           setShowConfirmModal(true);
         }}
-        aria-disabled={(!fxrpAmountStr || !minPriceStr || !!error || !isCorrectNetwork || txState === 'awaiting_approval' || txState === 'pending') ? "true" : "false"}
+        aria-disabled={(!fxrpAmountStr || (orderType !== 'Market' && !minPriceStr) || (orderType === 'Stop' && !stopPriceStr) || !!error || !isCorrectNetwork || txState === 'awaiting_approval' || txState === 'pending') ? "true" : "false"}
         className="btn-premium-sell"
         style={{
           width: '100%',
@@ -330,11 +367,11 @@ export const SellOrderForm: React.FC = () => {
             </div>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
               <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>
-              <div><strong>Min Price:</strong> {minPriceStr || 0} USDT0 per FXRP</div>
+              <div><strong>{orderType === 'Market' ? 'Est. Price' : 'Min Price'}:</strong> {orderType === 'Market' ? '1.0658' : (minPriceStr || 0)} USDT0 per FXRP</div>
             </div>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
               <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>
-              <div><strong>Total Expected:</strong> ~{(Number(fxrpAmountStr) * Number(minPriceStr)).toFixed(2)} USDT0</div>
+              <div><strong>{orderType === 'Market' ? 'Est. Total Expected' : 'Total Expected'}:</strong> ~{estimatedProceeds()} USDT0</div>
             </div>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
               <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>

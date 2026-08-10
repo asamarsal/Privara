@@ -371,7 +371,7 @@ export function AdvancedTrade({ viewToggle }: { viewToggle?: React.ReactNode }) 
 
           {/* Form */}
           <div style={{ flex: 1 }}>
-            {activeTab === 'buy' ? <BuyOrderForm /> : <SellOrderForm />}
+            {activeTab === 'buy' ? <BuyOrderForm orderType={orderType} /> : <SellOrderForm orderType={orderType} />}
           </div>
 
           {/* Security badge */}
