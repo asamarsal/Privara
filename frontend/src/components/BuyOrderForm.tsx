@@ -198,11 +198,16 @@ export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Li
 
   const handlePct = (pct: number) => {
     setSliderVal(pct);
-    if (!usdt0Balance || (!maxPriceStr && orderType !== 'Market')) return;
+    if (!usdt0Balance) return;
     try {
       const budget = (usdt0Balance * BigInt(pct)) / 100n;
       const currentMarketPrice = parseEther("1.0658");
-      const price = orderType === 'Market' ? currentMarketPrice : parseEther(maxPriceStr);
+      
+      let price = currentMarketPrice;
+      if (orderType !== 'Market' && maxPriceStr) {
+        price = parseEther(maxPriceStr);
+      }
+
       if (price > 0n) {
         const amt = (budget * 10n ** 18n) / price;
         setFxrpAmountStr(parseFloat(formatEther(amt)).toFixed(4));
