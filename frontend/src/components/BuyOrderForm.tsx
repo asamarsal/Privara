@@ -8,6 +8,7 @@ import { useVaultBalance } from '../hooks/useVaultBalance';
 import { OrderSide, Order, hashOrder, encodeOrderForHashing, OrderType } from '@privara/shared';
 import { saveOrderToHistory } from '../hooks/useActivity';
 import { useToast } from './ToastContext';
+import { useFtsoPrice } from '../hooks/useFtsoPrice';
 
 const vaultAbi = parseAbi([
   'function commitOrder(bytes32 orderId, uint8 side, address tokenIn, uint256 amountIn, bytes32 encryptedCommitment, uint64 expiry)'
@@ -18,6 +19,7 @@ export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Li
   const { isCorrectNetwork } = useNetwork();
   const { usdt0Balance, refetch } = useVaultBalance();
   const { addToast } = useToast();
+  const { priceFormatted, priceBigInt } = useFtsoPrice();
 
   const [fxrpAmountStr, setFxrpAmountStr] = useState('');
   const [maxPriceStr, setMaxPriceStr] = useState('');
@@ -69,7 +71,7 @@ export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Li
       }
 
       // Calculate estimated quote amount
-      const currentMarketPrice = parseEther("1.0658"); // Mock market price
+      const currentMarketPrice = priceBigInt;
       const calcPrice = orderType === 'Market' ? currentMarketPrice : maxPrice;
       const quoteAmount = (fxrpAmount * calcPrice) / 10n ** 18n;
 
@@ -89,7 +91,7 @@ export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Li
     try {
       if (!fxrpAmountStr) return '0.00';
       const fAmount = parseEther(fxrpAmountStr);
-      let calcPrice = parseEther("1.0658");
+      let calcPrice = priceBigInt;
       if (orderType !== 'Market' && maxPriceStr) {
         calcPrice = parseEther(maxPriceStr);
       }
@@ -118,7 +120,7 @@ export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Li
       const orderId = stringToHex(`order-${Date.now()}-${Math.floor(Math.random() * 1000)}`, { size: 32 });
 
       const orderTypeEnum = orderType === 'Market' ? OrderType.market : orderType === 'Stop' ? OrderType.stop : OrderType.limit;
-      const currentMarketPrice = parseEther("1.0658");
+      const currentMarketPrice = priceBigInt;
       const calcPrice = orderType === 'Market' ? currentMarketPrice : validated.maxPrice;
       const amountIn = (validated.fxrpAmount * calcPrice) / 10n ** 18n;
 
@@ -201,7 +203,7 @@ export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Li
     if (!usdt0Balance) return;
     try {
       const budget = (usdt0Balance * BigInt(pct)) / 100n;
-      const currentMarketPrice = parseEther("1.0658");
+      const currentMarketPrice = priceBigInt;
       
       let price = currentMarketPrice;
       if (orderType !== 'Market' && maxPriceStr) {
@@ -409,7 +411,7 @@ export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Li
             </div>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
               <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>
-              <div><strong>{orderType === 'Market' ? 'Est. Price' : 'Max Price'}:</strong> {orderType === 'Market' ? '1.0658' : (maxPriceStr || 0)} USDT0 per FXRP</div>
+              <div><strong>{orderType === 'Market' ? 'Est. Price' : 'Max Price'}:</strong> {orderType === 'Market' ? priceFormatted : (maxPriceStr || 0)} USDT0 per FXRP</div>
             </div>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
               <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>

@@ -6,11 +6,9 @@ import { SellOrderForm } from '../components/SellOrderForm';
 import { LiveOrderBook } from '../components/LiveOrderBook';
 import { LottieLoader } from './common/LottieLoader';
 import { Modal } from './Modal';
+import { useFtsoPrice } from '../hooks/useFtsoPrice';
 
 const stats = [
-  { label: '24h Volume', value: '582.36K', sub: 'FXRP' },
-  { label: '24h High', value: '1.0954', sub: '' },
-  { label: '24h Low', value: '1.0550', sub: '' },
   { label: 'Funding / 8h', value: '0.0100%', sub: '', green: true },
 ];
 
@@ -27,6 +25,7 @@ export function AdvancedTrade({ viewToggle }: { viewToggle?: React.ReactNode }) 
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isChartLoading, setIsChartLoading] = useState(true);
+  const { priceFormatted } = useFtsoPrice();
   
   const isDark = theme === 'dark';
   const containerRef = useRef<HTMLDivElement>(null);
@@ -414,18 +413,8 @@ export function AdvancedTrade({ viewToggle }: { viewToggle?: React.ReactNode }) 
 
         <div>
           <span style={{ color: 'var(--color-text-muted)' }}>FXRP Price </span>
-          <span style={{ color: 'var(--color-text-primary)' }}>$1.0658 </span>
-          <span style={{ color: 'var(--color-error)' }}>-0.16%</span>
-        </div>
-
-        <div>
-          <span style={{ color: 'var(--color-text-muted)' }}>24h Volume </span>
-          <span style={{ color: 'var(--color-text-primary)' }}>582.36K FXRP</span>
-        </div>
-
-        <div>
-          <span style={{ color: 'var(--color-text-muted)' }}>Open Interest </span>
-          <span style={{ color: 'var(--color-text-primary)' }}>124.56K FXRP</span>
+          <span style={{ color: 'var(--color-text-primary)' }}>${priceFormatted} </span>
+          <span style={{ color: 'var(--color-success)' }}>Live FTSO</span>
         </div>
 
         <div>

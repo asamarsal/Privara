@@ -8,6 +8,7 @@ import { useVaultBalance } from '../hooks/useVaultBalance';
 import { OrderSide, Order, hashOrder, encodeOrderForHashing, OrderType } from '@privara/shared';
 import { saveOrderToHistory } from '../hooks/useActivity';
 import { useToast } from './ToastContext';
+import { useFtsoPrice } from '../hooks/useFtsoPrice';
 
 const vaultAbi = parseAbi([
   'function commitOrder(bytes32 orderId, uint8 side, address tokenIn, uint256 amountIn, bytes32 encryptedCommitment, uint64 expiry)'
@@ -18,6 +19,7 @@ export const SellOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'L
   const { isCorrectNetwork } = useNetwork();
   const { fxrpBalance, refetch } = useVaultBalance();
   const { addToast } = useToast();
+  const { priceFormatted, priceBigInt } = useFtsoPrice();
 
   const [fxrpAmountStr, setFxrpAmountStr] = useState('');
   const [minPriceStr, setMinPriceStr] = useState('');
@@ -84,7 +86,7 @@ export const SellOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'L
     try {
       if (!fxrpAmountStr) return '0.00';
       const fAmount = parseEther(fxrpAmountStr);
-      let calcPrice = parseEther("1.0658");
+      let calcPrice = priceBigInt;
       if (orderType !== 'Market' && minPriceStr) {
         calcPrice = parseEther(minPriceStr);
       }
@@ -367,7 +369,7 @@ export const SellOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'L
             </div>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
               <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>
-              <div><strong>{orderType === 'Market' ? 'Est. Price' : 'Min Price'}:</strong> {orderType === 'Market' ? '1.0658' : (minPriceStr || 0)} USDT0 per FXRP</div>
+              <div><strong>{orderType === 'Market' ? 'Est. Price' : 'Min Price'}:</strong> {orderType === 'Market' ? priceFormatted : (minPriceStr || 0)} USDT0 per FXRP</div>
             </div>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
               <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>
