@@ -2,19 +2,23 @@ import React from 'react';
 import { useVaultBalance } from '../../hooks/useVaultBalance';
 
 import { useActivity } from '../../hooks/useActivity';
+import { useFtsoPrice } from '../../hooks/useFtsoPrice';
+import { formatEther } from 'viem';
 
 export const TopMetrics: React.FC = () => {
   const { formattedFxrp, formattedUsdt0, isLoading } = useVaultBalance();
-  const { orders } = useActivity();
-  const fxrpUsdValue = Number(formattedFxrp || 0) * 0.25;
+  const { metrics } = useActivity();
+  const { priceFormatted, status: priceStatus } = useFtsoPrice();
+  const liveFxrpPrice = priceStatus === 'live' ? Number(priceFormatted) : 0;
+  const fxrpUsdValue = Number(formattedFxrp || 0) * liveFxrpPrice;
   const usdt0UsdValue = Number(formattedUsdt0 || 0) * 1.00;
 
 
   const totalValue = (fxrpUsdValue + usdt0UsdValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   
-  // Basic calculation for metrics since we don't have historical data yet
-  const openOrdersCount = orders.length; // Approximate, as we fetch all orders
-  const settledTradesCount = 0; // Backend settlements endpoint pending
+  const openOrdersCount = metrics.activeOrders;
+  const settledTradesCount = metrics.settledTrades;
+  const volume24h = Number(formatEther(metrics.volume24h)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <div className="layout-top-metrics">
@@ -27,7 +31,7 @@ export const TopMetrics: React.FC = () => {
             ${isLoading ? '...' : totalValue}
           </div>
           <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-            Live FTSO Rates
+             {priceStatus === 'live' ? 'Live FTSO rate' : 'FTSO rate unavailable'}; USDT0 mock assumed $1
           </div>
         </div>
         <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(0,231,223,0.1)', color: '#00e7df', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>
@@ -40,10 +44,10 @@ export const TopMetrics: React.FC = () => {
         <div>
           <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '8px' }}>24h Volume</div>
           <div style={{ fontSize: '24px', fontWeight: 800, color: 'var(--color-text-primary)' }}>
-            $0.00
+            ${volume24h}
           </div>
           <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-            Data pending indexer
+            Indexed settlements
           </div>
         </div>
         <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(168,85,247,0.1)', color: '#a855f7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>

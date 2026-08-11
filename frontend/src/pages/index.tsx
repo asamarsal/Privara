@@ -220,7 +220,7 @@ export default function Home() {
             {typedTitle.length <= 28 ? typedTitle : (
               <>
                 {typedTitle.substring(0, 28)}
-                <span style={{ color: 'var(--color-accent-primary)' }}>{typedTitle.substring(28)}</span>
+                <span style={{ color: '#3B82F6' }}>{typedTitle.substring(28)}</span>
               </>
             )}
           </h1>
@@ -268,7 +268,7 @@ export default function Home() {
                 <span style={{ color: 'var(--color-accent-primary)' }}>≈</span> Privara Match Engine
               </div>
               <div style={{ color: 'var(--color-accent-primary)', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span>🔒</span> Confidential Compute
+                <img src="/icon/lockicon.png" alt="Lock" style={{ width: '13px', height: '13px', objectFit: 'contain' }} /> Confidential Compute
               </div>
             </div>
 
@@ -281,20 +281,18 @@ export default function Home() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div>
                     <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', marginBottom: '2px' }}>Price limit (max)</div>
-                    <div style={{ fontSize: '11px', color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}><span>🔒</span> Encrypted</div>
+                    <div style={{ fontSize: '11px', color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>Bound not in event</div>
                   </div>
                   <div>
                     <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', marginBottom: '2px' }}>Quantity (min)</div>
-                    <div style={{ fontSize: '11px', color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}><span>🔒</span> Encrypted</div>
+                    <div style={{ fontSize: '11px', color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>Bound not in event</div>
                   </div>
                 </div>
               </div>
 
-              {/* Shield Icon */}
+              {/* Lock Icon */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', zIndex: 10 }}>
-                <div style={{ width: '44px', height: '52px', background: 'rgba(0,231,223,0.05)', border: '1px solid var(--color-accent-primary)', borderRadius: '12px 12px 24px 24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', boxShadow: '0 0 15px rgba(0,231,223,0.2)' }}>
-                  🔒
-                </div>
+                <img src="/icon/lockicon.png" alt="Lock" style={{ width: '38px', height: '38px', objectFit: 'contain' }} />
                 <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', textAlign: 'center', marginTop: '2px' }}>
                   Confidential<br />Matching
                 </div>
@@ -311,11 +309,11 @@ export default function Home() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div>
                     <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', marginBottom: '2px' }}>Price limit (min)</div>
-                    <div style={{ fontSize: '11px', color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}><span>🔒</span> Encrypted</div>
+                    <div style={{ fontSize: '11px', color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>Bound not in event</div>
                   </div>
                   <div>
                     <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', marginBottom: '2px' }}>Quantity (min)</div>
-                    <div style={{ fontSize: '11px', color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}><span>🔒</span> Encrypted</div>
+                    <div style={{ fontSize: '11px', color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>Bound not in event</div>
                   </div>
                 </div>
               </div>
@@ -394,7 +392,7 @@ export default function Home() {
         alignItems: 'stretch'
       }}>
         {[
-          { title: 'Private Orders', icon: '🔒', desc: 'Your price limits and quantities remain encrypted and are never revealed on-chain or to peers.' },
+          { title: 'Private Orders', icon: '/icon/lockicon.png', desc: 'Limit-price payloads are hash-committed; current Coston2 metadata and settlement remain public.' },
           { title: 'Confidential Matching', icon: '🛡️', desc: 'Flare Confidential Compute privately compares orders and returns only a match result—never the terms.' },
           { title: 'FTSOv2 Price Guard', icon: '📊', desc: 'FTSOv2 provides decentralized, manipulation-resistant pricing to protect fair settlement.' },
           { title: 'On-Chain Settlement', icon: '✅', desc: 'Smart contracts securely settle FXRP and USDT0 on Flare Coston2—verifiable and final.' }
@@ -410,7 +408,7 @@ export default function Home() {
             gap: '12px',
           }}>
             <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(0,231,223,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', border: '1px solid rgba(0,231,223,0.2)' }}>
-              {f.icon}
+              {f.icon.startsWith('/') ? <img src={f.icon} alt="Icon" style={{ width: '20px', height: '20px', objectFit: 'contain' }} /> : f.icon}
             </div>
             <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
               <h3 style={{ margin: '0 0 6px 0', fontSize: '1rem' }}>{f.title}</h3>
@@ -424,16 +422,24 @@ export default function Home() {
 
       {/* ─── HOW PRIVARA WORKS ─── */}
       <section className="how-it-works-section" style={{ marginTop: '1rem' }}>
-        <h2 style={{ textAlign: 'center', fontSize: '1.5rem', marginTop: '1rem', marginBottom: '1.75rem' }}>{typedHiw}</h2>
+        <h2 style={{ textAlign: 'center', fontSize: '1.5rem', marginTop: '1rem', marginBottom: '1.75rem' }}>
+          {typedHiw.length <= 4 ? typedHiw : (
+            <>
+              {typedHiw.substring(0, 4)}
+              <span style={{ color: '#3B82F6' }}>{typedHiw.length > 4 ? typedHiw.substring(4, 11) : ''}</span>
+              {typedHiw.length > 11 ? typedHiw.substring(11) : ''}
+            </>
+          )}
+        </h2>
         <div className="grid-4" style={{ gap: '1rem', position: 'relative' }}>
           {/* Connector line */}
           <div className="hide-mobile how-it-works-line" style={{ position: 'absolute', top: '20px', left: '10%', right: '10%', height: '1px', borderTop: '2px dashed var(--color-border)', zIndex: 0 }}></div>
 
           {[
-            { num: 1, title: 'Deposit', icon: '💰', desc: 'Deposit FXRP or USDT0 into your non-custodial Privara vault.' },
-            { num: 2, title: 'Encrypt Order', icon: '🔒', desc: 'Create your order with price and quantity limits. Terms are encrypted.' },
-            { num: 3, title: 'Match', icon: '🤝', desc: 'The match engine privately compares orders and returns only a match result.' },
-            { num: 4, title: 'Settle', icon: '🛡️', desc: 'Smart contracts settle the trade on Flare Coston2. Funds move, privacy stays.' }
+            { num: 1, title: 'Deposit', icon: '💰', desc: 'Deposit test-only FXRP or USDT0 into PrivaraVault V2; balances and transfers are public on Coston2.' },
+            { num: 2, title: 'Commit Order', icon: '/icon/lockicon.png', desc: 'Sign a canonical plaintext payload and commit its hash on-chain. Hashing is not encryption.' },
+            { num: 3, title: 'Local-Mock Match', icon: '🤝', desc: 'The disclosed local matcher verifies and compares maker-signed plaintext payloads.' },
+            { num: 4, title: 'Settle', icon: '🛡️', desc: 'The vault verifies the signed result and FTSOv2 guard, then settles publicly on Coston2.' }
           ].map(s => (
             <div key={s.num} className="how-it-works-step hiw-neobrutalism" style={{
               background: 'var(--color-bg-glass)',
@@ -456,7 +462,9 @@ export default function Home() {
                 }}>
                   {s.num}
                 </div>
-                <div style={{ fontSize: '18px' }}>{s.icon}</div>
+                <div style={{ fontSize: '18px' }}>
+                  {s.icon.startsWith('/') ? <img src={s.icon} alt="Icon" style={{ width: '18px', height: '18px', objectFit: 'contain' }} /> : s.icon}
+                </div>
               </div>
               <div>
                 <h4 style={{ margin: '0 0 6px 0', fontSize: '1rem' }}>{s.title}</h4>
@@ -468,21 +476,21 @@ export default function Home() {
           ))}
         </div>
 
-        {/* ─── ENCRYPTED ORDERS DEMO ─── */}
+        {/* ─── COMMITTED ORDERS DEMO ─── */}
         <div className="encrypted-orders-section" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', marginTop: '2.5rem' }}>
           {/* Buy Orders */}
           <div className="encrypted-order-card hiw-neobrutalism" style={{ '--hover-color': '#00bfb8', background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '20px', backdropFilter: 'blur(12px)', boxShadow: '0 4px 20px rgba(0, 191, 184, 0.05)' } as React.CSSProperties}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
               <span style={{ fontSize: '20px' }}>🛒</span>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--color-text-primary)' }}>Encrypted Buy Orders</h3>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--color-text-primary)' }}>Committed Buy Orders</h3>
             </div>
             <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
               <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse', minWidth: '400px' }}>
                 <thead>
                   <tr style={{ color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)' }}>
                     <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>#</th>
-                    <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Encrypted Price ⓘ</th>
-                    <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Encrypted Size ⓘ</th>
+                    <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Limit Bound ⓘ</th>
+                    <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Public Amount ⓘ</th>
                     <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Expiry ⓘ</th>
                     <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Status</th>
                   </tr>
@@ -495,8 +503,8 @@ export default function Home() {
                   ].map(row => (
                     <tr key={row.id} className="table-row-hover" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                       <td style={{ padding: '12px 4px' }}>{row.id}</td>
-                      <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}>🔒 Encrypted</td>
-                      <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}>🔒 Encrypted</td>
+<td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Not in event</span></td>
+                       <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Public on-chain</span></td>
                       <td style={{ padding: '12px 4px', color: 'var(--color-text-muted)' }}>{row.exp}</td>
                       <td style={{ padding: '12px 4px', color: '#00e676', fontWeight: 600 }}>●Active</td>
                     </tr>
@@ -506,7 +514,7 @@ export default function Home() {
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '14px', background: 'rgba(0, 191, 184, 0.08)', borderRadius: '12px', border: '1px solid rgba(0, 191, 184, 0.2)' }}>
               <span style={{ fontSize: '18px', lineHeight: 1 }}>🛡️</span>
-              <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>All order details are encrypted and confidential until a match occurs.</span>
+              <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>The current prototype anchors order commitments and uses a disclosed local matching adapter.</span>
             </div>
           </div>
 
@@ -514,15 +522,15 @@ export default function Home() {
           <div className="encrypted-order-card hiw-neobrutalism" style={{ '--hover-color': '#e62058', background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '20px', backdropFilter: 'blur(12px)', boxShadow: '0 4px 20px rgba(230, 32, 88, 0.05)' } as React.CSSProperties}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
               <span style={{ fontSize: '20px' }}>🛒</span>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--color-text-primary)' }}>Encrypted Sell Orders</h3>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--color-text-primary)' }}>Committed Sell Orders</h3>
             </div>
             <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
               <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse', minWidth: '400px' }}>
                 <thead>
                   <tr style={{ color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)' }}>
                     <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>#</th>
-                    <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Encrypted Price ⓘ</th>
-                    <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Encrypted Size ⓘ</th>
+                    <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Limit Bound ⓘ</th>
+                    <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Public Amount ⓘ</th>
                     <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Expiry ⓘ</th>
                     <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Status</th>
                   </tr>
@@ -535,8 +543,8 @@ export default function Home() {
                   ].map(row => (
                     <tr key={row.id} className="table-row-hover" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                       <td style={{ padding: '12px 4px' }}>{row.id}</td>
-                      <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}>🔒 Encrypted</td>
-                      <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}>🔒 Encrypted</td>
+<td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Not in event</span></td>
+                       <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Public on-chain</span></td>
                       <td style={{ padding: '12px 4px', color: 'var(--color-text-muted)' }}>{row.exp}</td>
                       <td style={{ padding: '12px 4px', color: '#ff4d4d', fontWeight: 600 }}>●Active</td>
                     </tr>
@@ -546,7 +554,7 @@ export default function Home() {
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '14px', background: 'rgba(230, 32, 88, 0.08)', borderRadius: '12px', border: '1px solid rgba(230, 32, 88, 0.2)' }}>
               <span style={{ fontSize: '18px', lineHeight: 1 }}>🛡️</span>
-              <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>Unmatched order terms remain confidential and are never revealed on-chain.</span>
+              <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>Limit prices are represented by commitments; public metadata is disclosed in the privacy model.</span>
             </div>
           </div>
         </div>

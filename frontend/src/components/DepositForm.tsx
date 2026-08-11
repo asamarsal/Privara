@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useReadContracts } from 'wagmi';
+import React, { useEffect, useState } from 'react';
+import { useAccount, useWriteContract, useReadContracts, usePublicClient } from 'wagmi';
+import { useQueryClient } from '@tanstack/react-query';
+import { useVaultBalance } from '../hooks/useVaultBalance';
 import { TransactionState } from './TransactionState';
 import { parseAbi, parseEther, formatEther } from 'viem';
 import { useNetwork } from '../hooks/useNetwork';
+import { deployment, isAuditedV2Deployment } from '../config/deployment';
 
 const erc20Abi = parseAbi([
   'function balanceOf(address account) view returns (uint256)',
@@ -14,16 +17,15 @@ const vaultAbi = parseAbi([
   'function deposit(address token, uint256 amount)'
 ]);
 
-export const DepositForm: React.FC = () => {
+export const DepositForm: React.FC<{ initialToken?: 'FXRP' | 'USDT0' }> = ({ initialToken = 'FXRP' }) => {
   const { address } = useAccount();
   const { isCorrectNetwork } = useNetwork();
-  const [token, setToken] = useState<'FXRP' | 'USDT0'>('FXRP');
+  const [token, setToken] = useState<'FXRP' | 'USDT0'>(initialToken);
+  useEffect(() => setToken(initialToken), [initialToken]);
   const [amountStr, setAmountStr] = useState('');
   const [error, setError] = useState('');
 
-  const vaultAddress = "0xa479Bc0C4B000D0dcD6FaC3BB9E71B830eBE048E";
-  const fxrpAddress = "0x12967a98792fc53Fb39E91d9B69917B5D32fb011";
-  const usdt0Address = "0xDC7E830282489f5e461C4bfC0deE292fD9591C86";
+  const { vault: vaultAddress, fxrp: fxrpAddress, usdt0: usdt0Address } = deployment;
 
   const tokenAddress = token === 'FXRP' ? fxrpAddress : usdt0Address;
 
@@ -41,6 +43,9 @@ export const DepositForm: React.FC = () => {
 
   const { writeContractAsync: writeApprove } = useWriteContract();
   const { writeContractAsync: writeDeposit } = useWriteContract();
+  const publicClient = usePublicClient();
+  const queryClient = useQueryClient();
+  const { refetch: refetchVault } = useVaultBalance();
 
   const [txState, setTxState] = useState<'idle' | 'awaiting_approval' | 'pending' | 'success' | 'error'>('idle');
   const [txHash, setTxHash] = useState<string>();
@@ -96,35 +101,42 @@ export const DepositForm: React.FC = () => {
       setTxError('');
       setTxHash(undefined);
 
-      // 1. Approve if necessary
+      if (!isAuditedV2Deployment) throw new Error('Writes are disabled until PrivaraVault V2 is deployed on Coston2');
+      if (!address || !isCorrectNetwork || !publicClient) throw new Error('Connect a wallet on Coston2');
+      // 1. Approve and wait for confirmation if necessary.
       if (currentAllowance === undefined || currentAllowance < parsedAmount) {
         const approveHash = await writeApprove({
           address: tokenAddress,
           abi: erc20Abi,
           functionName: 'approve',
           args: [vaultAddress, parsedAmount],
+          chainId: 114,
         });
-        // Simplification: In a real app we would wait for this tx to be mined using useWaitForTransactionReceipt
-        // But for hackathon MVP we'll chain them assuming immediate execution or user will re-click
+        setTxHash(approveHash);
+        setTxState('pending');
+        const approval = await publicClient.waitForTransactionReceipt({ hash: approveHash });
+        if (approval.status !== 'success') throw new Error('Token approval reverted');
+        await refetch();
+        await queryClient.invalidateQueries({ queryKey: ['readContract'] });
+        setTxState('awaiting_approval');
       }
 
-      // 2. Deposit
+      // 2. Deposit and wait for the on-chain receipt.
       const depositHash = await writeDeposit({
         address: vaultAddress,
         abi: vaultAbi,
         functionName: 'deposit',
-        args: [tokenAddress, parsedAmount]
+        args: [tokenAddress, parsedAmount],
+        chainId: 114,
       });
 
       setTxHash(depositHash);
       setTxState('pending');
-
-      // Wait for it in real life via receipt hook, here we mock it transitioning for simplicity since 
-      // useWaitForTransactionReceipt is hook-based and we are doing an async flow
-      // We will rely on manual status updates or just set pending.
-      // For MVP:
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: depositHash });
+      if (receipt.status !== 'success') throw new Error('Deposit reverted');
       setTxState('success');
-      refetch();
+      await Promise.all([refetch(), refetchVault()]);
+      await queryClient.invalidateQueries({ queryKey: ['readContract'] });
     } catch (err: any) {
       setTxState('error');
       setTxError(err.message || 'Transaction failed');
@@ -159,8 +171,11 @@ export const DepositForm: React.FC = () => {
 
       <div>
         <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          <label htmlFor="deposit-amount" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Deposit amount in {token}</label>
           <input
+            id="deposit-amount"
             type="text"
+            inputMode="decimal"
             className="input-field"
             placeholder="0.00"
             value={amountStr}
@@ -178,7 +193,7 @@ export const DepositForm: React.FC = () => {
         className="btn-premium-buy"
         style={{ width: '100%', padding: '14px', fontSize: '15px' }}
         onClick={handleDeposit}
-        disabled={!amountStr || !!error || !isCorrectNetwork || txState === 'awaiting_approval' || txState === 'pending'}
+        disabled={!isAuditedV2Deployment || !address || !amountStr || !!error || !isCorrectNetwork || txState === 'awaiting_approval' || txState === 'pending'}
       >
         Deposit {token}
       </button>

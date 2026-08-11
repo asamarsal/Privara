@@ -10,10 +10,11 @@ const OrderRow: React.FC<{ order: OrderHistoryItem; isLast?: boolean }> = ({ ord
   const { status, isLoading } = useOrderStatus(order.orderId, order.expiry);
   
   const sideLabel = order.side === 0 ? 'Buy' : 'Sell';
-  const pairLabel = `${order.tokenIn === '0x12967a98792fc53Fb39E91d9B69917B5D32fb011' ? 'FXRP' : 'USDT0'} / ${order.tokenIn === '0x12967a98792fc53Fb39E91d9B69917B5D32fb011' ? 'USDT0' : 'FXRP'}`;
+  const pairLabel = 'FXRP / USDT0';
+  const amountToken = order.side === 0 ? 'USDT0' : 'FXRP';
   
   // Format amount (assume 18 decimals)
-  const amountStr = Number(formatEther(order.amountIn)).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const amountStr = `${Number(formatEther(order.amountIn)).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${amountToken}`;
 
   return (
     <tr style={{ borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.05)' }}>
@@ -35,7 +36,7 @@ const OrderRow: React.FC<{ order: OrderHistoryItem; isLast?: boolean }> = ({ ord
       </td>
       <td style={{ padding: '12px 8px', fontWeight: 600, color: 'var(--color-text-primary)' }}>{pairLabel}</td>
       <td style={{ padding: '12px 8px', fontFamily: 'monospace' }}>{amountStr}</td>
-      <td className="hide-on-mobile" style={{ padding: '12px 8px', fontFamily: 'monospace' }}>Market (FTSO)</td>
+      <td className="hide-on-mobile" style={{ padding: '12px 8px', fontFamily: 'monospace' }}>Committed bound</td>
       <td style={{ padding: '12px 8px' }}>
         {isLoading ? (
           <MiniLottieSpinner size={20} />
@@ -86,7 +87,7 @@ export const OrdersTable: React.FC = () => {
             </thead>
             <tbody>
               {orders.map((order, i) => (
-                <OrderRow key={i} order={order} isLast={i === orders.length - 1} />
+                <OrderRow key={order.orderId} order={order} isLast={i === orders.length - 1} />
               ))}
             </tbody>
           </table>

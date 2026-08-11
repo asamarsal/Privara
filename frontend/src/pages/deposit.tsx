@@ -1,13 +1,22 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { DepositForm } from '../components/DepositForm';
+import { WithdrawalForm } from '../components/WithdrawalForm';
 import { useRouter } from 'next/router';
 
 export default function DepositPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'deposit' | 'withdraw'>(
-    router.query.action === 'withdraw' ? 'withdraw' : 'deposit'
-  );
+  const [activeTab, setActiveTab] = useState<'deposit' | 'withdraw'>('deposit');
+
+  useEffect(() => {
+    if (!router.isReady) return;
+    setActiveTab(router.query.action === 'withdraw' ? 'withdraw' : 'deposit');
+  }, [router.isReady, router.query.action]);
+
+  const selectTab = (action: 'deposit' | 'withdraw') => {
+    setActiveTab(action);
+    void router.replace({ pathname: '/deposit', query: action === 'withdraw' ? { action } : {} }, undefined, { shallow: true });
+  };
 
   return (
     <div style={{ maxWidth: '600px', margin: '40px auto', padding: '0 20px' }}>
@@ -28,7 +37,7 @@ export default function DepositPage() {
       <div style={{ background: 'var(--color-bg-glass)', border: '1px solid var(--color-border)', borderRadius: '16px', overflow: 'hidden' }}>
         <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)' }}>
           <button 
-            onClick={() => setActiveTab('deposit')}
+            onClick={() => selectTab('deposit')}
             style={{ 
               flex: 1, padding: '16px', background: 'transparent', border: 'none', cursor: 'pointer',
               fontWeight: 600, fontSize: '14px',
@@ -39,7 +48,7 @@ export default function DepositPage() {
             Deposit
           </button>
           <button 
-            onClick={() => setActiveTab('withdraw')}
+            onClick={() => selectTab('withdraw')}
             style={{ 
               flex: 1, padding: '16px', background: 'transparent', border: 'none', cursor: 'pointer',
               fontWeight: 600, fontSize: '14px',
@@ -55,13 +64,7 @@ export default function DepositPage() {
           {activeTab === 'deposit' ? (
             <DepositForm />
           ) : (
-            <div style={{ textAlign: 'center', padding: '40px 0' }}>
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>🚧</div>
-              <h3 style={{ margin: '0 0 8px 0', color: 'var(--color-text-primary)' }}>Withdrawals Coming Soon</h3>
-              <p style={{ color: 'var(--color-text-secondary)', fontSize: '14px', margin: 0 }}>
-                Withdrawal feature is currently being tested on the testnet.
-              </p>
-            </div>
+            <WithdrawalForm />
           )}
         </div>
       </div>

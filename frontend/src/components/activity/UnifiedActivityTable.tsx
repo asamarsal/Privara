@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useActivity, OrderHistoryItem, SettlementHistoryItem } from '../../hooks/useActivity';
 import { formatEther } from 'viem';
 import { LottieLoader } from '../common/LottieLoader';
+import { deployment } from '../../config/deployment';
 
 type FilterType = 'all' | 'orders' | 'matches' | 'settlements';
 
@@ -18,8 +19,8 @@ type UnifiedEvent = {
   raw: OrderHistoryItem | SettlementHistoryItem;
 };
 
-const FXRP_ADDRESS = '0x12967a98792fc53Fb39E91d9B69917B5D32fb011';
-const EXPLORER = 'https://coston2-explorer.flare.network';
+const FXRP_ADDRESS = deployment.fxrp;
+const EXPLORER = deployment.explorerUrl;
 
 const STATUS_COLORS: Record<string, { color: string; bg: string; border: string; label: string }> = {
   active: { color: '#00b4d8', bg: 'rgba(0,180,216,0.08)', border: 'rgba(0,180,216,0.3)', label: 'Active' },
@@ -108,10 +109,9 @@ export const UnifiedActivityTable: React.FC = () => {
 
     // Add orders as "Order Submitted"
     orders.forEach(o => {
-      const isFxrp = o.tokenIn?.toLowerCase() === FXRP_ADDRESS.toLowerCase();
-      const pair = isFxrp ? 'FXRP/USDT0' : 'USDT0/FXRP';
+      const pair = 'FXRP/USDT0';
       const amountFormatted = Number(formatEther(o.amountIn)).toLocaleString(undefined, { maximumFractionDigits: 2 });
-      const tokenSymbol = isFxrp ? 'FXRP' : 'USDT0';
+      const tokenSymbol = o.side === 0 ? 'USDT0' : 'FXRP';
       result.push({
         type: 'order_submitted',
         txHash: o.txHash || o.orderId,
@@ -123,22 +123,10 @@ export const UnifiedActivityTable: React.FC = () => {
       });
     });
 
-    // Add settlements as "Trade Settled" and inject "Match Found" for each
+    // Add actual indexed settlement events only.
     settlements.forEach(s => {
       const fxrpAmt = Number(formatEther(s.fxrpAmount)).toLocaleString(undefined, { maximumFractionDigits: 2 });
       const execPrice = Number(formatEther(s.executionPrice)).toLocaleString(undefined, { maximumFractionDigits: 4 });
-
-      result.push({
-        type: 'match_found',
-        txHash: s.txHash,
-        matchId: s.matchId,
-        pair: 'FXRP/USDT0',
-        amount: `${fxrpAmt} FXRP`,
-        executionPrice: `${execPrice} USDT0`,
-        blockNumber: 0,
-        status: 'matched',
-        raw: s,
-      });
 
       result.push({
         type: 'trade_settled',
@@ -147,7 +135,7 @@ export const UnifiedActivityTable: React.FC = () => {
         pair: 'FXRP/USDT0',
         amount: `${fxrpAmt} FXRP`,
         executionPrice: `${execPrice} USDT0`,
-        blockNumber: 0,
+        blockNumber: s.blockNumber,
         status: 'settled',
         raw: s,
       });

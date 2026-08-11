@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import { useActivity } from '../../hooks/useActivity';
 import { formatEther } from 'viem';
 import { LottieLoader } from '../common/LottieLoader';
+import { deployment } from '../../config/deployment';
 
 export const HistoryTable: React.FC = () => {
   const router = useRouter();
@@ -49,7 +50,7 @@ export const HistoryTable: React.FC = () => {
                     {Number(formatEther(settlement.executionPrice)).toLocaleString(undefined, { maximumFractionDigits: 4 })}
                   </td>
                   <td className="hide-on-mobile" style={{ padding: '12px 8px' }}>
-                    <a href={`https://coston2-explorer.flare.network/tx/${settlement.txHash}`} target="_blank" rel="noreferrer" style={{ color: '#00b4d8', textDecoration: 'none' }}>
+                    <a href={`${deployment.explorerUrl}/tx/${settlement.txHash}`} target="_blank" rel="noreferrer" style={{ color: '#00b4d8', textDecoration: 'none' }}>
                       {settlement.txHash.slice(0, 6)}...
                     </a>
                   </td>

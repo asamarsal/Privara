@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
-import { useAccount, useWriteContract } from 'wagmi';
+import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
 import { parseAbi, formatEther } from 'viem';
 import { OrderHistoryItem } from '../hooks/useActivity';
 import { useOrderStatus } from '../hooks/useOrderStatus';
 import { OrderStatusBadge } from './OrderStatusBadge';
 import { TransactionState } from './TransactionState';
+import { deployment, isAuditedV2Deployment } from '../config/deployment';
+import { useNetwork } from '../hooks/useNetwork';
+import { useVaultBalance } from '../hooks/useVaultBalance';
+import { orderErrorMessage } from '../utils/tokenFormatting';
 
 const vaultAbi = parseAbi([
   'function cancelOrder(bytes32 orderId)'
@@ -12,35 +16,43 @@ const vaultAbi = parseAbi([
 
 export const OrderCard: React.FC<{ order: OrderHistoryItem; showCancel?: boolean }> = ({ order, showCancel = true }) => {
   const { address } = useAccount();
-  const { status, isLoading } = useOrderStatus(order.orderId, order.expiry);
+  const { status, isLoading, refetch: refetchStatus } = useOrderStatus(order.orderId, order.expiry);
   const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
+  const { isCorrectNetwork } = useNetwork();
+  const { refetch: refetchBalances } = useVaultBalance();
   
   const [txState, setTxState] = useState<'idle' | 'awaiting_approval' | 'pending' | 'success' | 'error'>('idle');
   const [txHash, setTxHash] = useState<string>();
   const [txError, setTxError] = useState<string>();
 
-  const vaultAddress = "0xa479Bc0C4B000D0dcD6FaC3BB9E71B830eBE048E";
-  const explorerUrl = process.env.NEXT_PUBLIC_COSTON2_EXPLORER_URL || 'https://coston2-explorer.flare.network';
+  const { vault: vaultAddress, explorerUrl } = deployment;
 
   const handleCancel = async () => {
     try {
+      if (!address) throw new Error('Connect the maker wallet before cancelling');
+      if (!isAuditedV2Deployment || !isCorrectNetwork || !publicClient) throw new Error('Connect the maker wallet on Coston2 V2');
       setTxState('awaiting_approval');
       setTxError('');
+      setTxHash(undefined);
       
       const hash = await writeContractAsync({
         address: vaultAddress,
         abi: vaultAbi,
         functionName: 'cancelOrder',
-        args: [order.orderId as `0x${string}`]
+        args: [order.orderId as `0x${string}`],
+        chainId: 114,
       });
 
       setTxHash(hash);
       setTxState('pending');
-      // For MVP, optimistically show success
-      setTimeout(() => setTxState('success'), 2000);
-    } catch (err: any) {
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status !== 'success') throw new Error('Order cancellation reverted');
+      setTxState('success');
+      await Promise.all([refetchBalances(), refetchStatus()]);
+    } catch (err: unknown) {
       setTxState('error');
-      setTxError(err.message || 'Failed to cancel order');
+      setTxError(orderErrorMessage(err));
     }
   };
 
@@ -82,7 +94,7 @@ export const OrderCard: React.FC<{ order: OrderHistoryItem; showCancel?: boolean
         </div>
       )}
 
-      {showCancel && status === 'open' && (
+      {showCancel && (status === 'open' || status === 'expired') && (
         <button 
           className="btn-danger" 
           onClick={handleCancel}

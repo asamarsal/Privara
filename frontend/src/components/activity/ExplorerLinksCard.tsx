@@ -1,10 +1,11 @@
 import React from 'react';
+import { deployment } from '../../config/deployment';
 
 const LINKS = [
-  { label: 'Flare Network Explorer', url: 'https://coston2-explorer.flare.network' },
-  { label: 'Coston2 Testnet Explorer', url: 'https://coston2-explorer.flare.network' },
+  { label: 'Flare Network Explorer', url: deployment.explorerUrl },
+  { label: 'Coston2 Testnet Explorer', url: deployment.explorerUrl },
   { label: 'FTSOv2 Price Feed', url: 'https://dev.flare.network/ftso/overview' },
-  { label: 'Privara Contracts', url: 'https://coston2-explorer.flare.network/address/0xa479Bc0C4B000D0dcD6FaC3BB9E71B830eBE048E' },
+  { label: 'Privara Contracts', url: `${deployment.explorerUrl}/address/${deployment.vault}` },
 ];
 
 function ExternalLinkIcon() {

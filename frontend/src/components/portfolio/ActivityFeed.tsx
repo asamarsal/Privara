@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useActivity } from '../../hooks/useActivity';
 import { formatEther } from 'viem';
 import { LottieLoader } from '../common/LottieLoader';
+import { deployment } from '../../config/deployment';
 
 export const ActivityFeed: React.FC = () => {
   const { orders, isLoading } = useActivity();
@@ -25,7 +26,7 @@ export const ActivityFeed: React.FC = () => {
         ) : (
           orders.slice(0, 4).map((act, i) => {
             const isBuy = act.side === 0;
-            const tokenSymbol = act.tokenIn === '0x12967a98792fc53Fb39E91d9B69917B5D32fb011' ? 'FXRP' : 'USDT0';
+            const tokenSymbol = act.tokenIn.toLowerCase() === deployment.fxrp.toLowerCase() ? 'FXRP' : 'USDT0';
             const amountStr = Number(formatEther(act.amountIn)).toLocaleString(undefined, { maximumFractionDigits: 2 });
             const color = isBuy ? 'var(--color-success)' : 'var(--color-error)';
             

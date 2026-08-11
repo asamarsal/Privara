@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAccount } from 'wagmi';
 
 export interface OrderHistoryItem {
   orderId: string;
   maker: string;
-  side: number; // 0 = buy, 1 = sell
+  side: number;
   tokenIn: string;
   amountIn: bigint;
   expiry: number;
   blockNumber: number;
   txHash?: string;
+  timestamp?: number;
 }
 
 export interface SettlementHistoryItem {
@@ -20,62 +21,104 @@ export interface SettlementHistoryItem {
   fxrpAmount: bigint;
   quoteAmount: bigint;
   txHash: string;
+  blockNumber: number;
+  timestamp?: number;
+  ftsoPrice?: bigint;
 }
 
-// Remove localStorage helpers - no longer needed
-export function saveOrderToHistory(_order: any) {
-  // No-op: data now comes from the backend indexer
+export interface PortfolioMetrics {
+  volume24h: bigint;
+  activeOrders: number;
+  settledTrades: number;
+}
+
+export interface PortfolioFreshness {
+  updatedAt?: number;
+  indexedBlock?: number;
+  [key: string]: unknown;
+}
+
+interface PortfolioResponse {
+  orders: OrderHistoryItem[];
+  settlements: SettlementHistoryItem[];
+  metrics: PortfolioMetrics;
+  freshness: PortfolioFreshness | null;
+}
+
+export function saveOrderToHistory(_order: unknown) {
+  // No-op: data comes from the backend indexer.
 }
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+export const portfolioQueryKey = (address: string) => ['portfolio', address.toLowerCase()] as const;
+
+const bigint = (value: unknown) => BigInt((value ?? 0) as string | number | bigint);
+const number = (value: unknown) => Number(value ?? 0);
+
+function parsePortfolio(raw: any): PortfolioResponse {
+  const metrics = raw?.metrics ?? {};
+  return {
+    orders: (raw?.activeOrders ?? []).map((order: any) => ({
+      ...order,
+      amountIn: bigint(order.amountIn),
+      side: number(order.side),
+      expiry: number(order.expiry),
+      blockNumber: number(order.blockNumber),
+      timestamp: order.timestamp == null ? undefined : number(order.timestamp),
+    })),
+    settlements: (raw?.settledTrades ?? []).map((settlement: any) => ({
+      ...settlement,
+      executionPrice: bigint(settlement.executionPrice),
+      fxrpAmount: bigint(settlement.fxrpAmount),
+      quoteAmount: bigint(settlement.quoteAmount),
+      ftsoPrice: settlement.ftsoPrice == null ? undefined : bigint(settlement.ftsoPrice),
+      blockNumber: number(settlement.blockNumber),
+      timestamp: settlement.timestamp == null ? undefined : number(settlement.timestamp),
+    })),
+    metrics: {
+      volume24h: bigint(metrics.userVolume24hQuote ?? 0),
+      activeOrders: number(metrics.activeOrdersCount),
+      settledTrades: number(metrics.settledTradesCount),
+    },
+    freshness: raw?.indexer ?? null,
+  };
+}
+
+async function fetchPortfolio(address: string, signal?: AbortSignal): Promise<PortfolioResponse> {
+  const response = await fetch(`${BACKEND_URL}/portfolio/${address}`, { signal });
+  if (!response.ok) throw new Error(`Backend returned ${response.status}`);
+  return parsePortfolio(await response.json());
+}
 
 export const useActivity = () => {
   const { address } = useAccount();
-  const [orders, setOrders] = useState<OrderHistoryItem[]>([]);
-  const [settlements, setSettlements] = useState<SettlementHistoryItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: address ? portfolioQueryKey(address) : ['portfolio', 'disconnected'],
+    queryFn: ({ signal }) => fetchPortfolio(address!, signal),
+    enabled: !!address,
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+    staleTime: 2_000,
+    retry: 1,
+  });
 
-  const refresh = async (isBackground = false) => {
+  const emptyMetrics: PortfolioMetrics = { volume24h: 0n, activeOrders: 0, settledTrades: 0 };
+  const refresh = async (_isBackground = false) => {
     if (!address) {
-      setIsLoading(false);
-      setOrders([]);
+      queryClient.removeQueries({ queryKey: ['portfolio'] });
       return;
     }
-    if (!isBackground) setIsLoading(true);
-    setError(null);
-
-    try {
-      // Fetch orders for this address from the backend indexer
-      const res = await fetch(`${BACKEND_URL}/orders/${address}`);
-      if (!res.ok) throw new Error(`Backend returned ${res.status}`);
-
-      const raw: any[] = await res.json();
-      const parsed: OrderHistoryItem[] = raw.map(o => ({
-        ...o,
-        amountIn: BigInt(o.amountIn),
-      }));
-
-      setOrders(parsed);
-      setSettlements([]); // Settlements endpoint can be added later
-    } catch (err: any) {
-      console.error('[Activity] Backend fetch failed:', err);
-      setError(
-        err?.message?.includes('Failed to fetch')
-          ? 'Cannot connect to backend indexer. Make sure the backend is running (npm run dev in backend folder).'
-          : err.message
-      );
-    } finally {
-      if (!isBackground) setIsLoading(false);
-    }
+    await query.refetch({ cancelRefetch: true });
   };
 
-  useEffect(() => {
-    refresh();
-    // Poll every 10 seconds for real-time updates without flickering
-    const interval = setInterval(() => refresh(true), 10000);
-    return () => clearInterval(interval);
-  }, [address]);
-
-  return { orders, settlements, isLoading, error, refresh };
+  return {
+    orders: address ? query.data?.orders ?? [] : [],
+    settlements: address ? query.data?.settlements ?? [] : [],
+    metrics: address ? query.data?.metrics ?? emptyMetrics : emptyMetrics,
+    freshness: address ? query.data?.freshness ?? null : null,
+    isLoading: !!address && query.isLoading,
+    error: query.error instanceof Error ? query.error.message : null,
+    refresh,
+  };
 };

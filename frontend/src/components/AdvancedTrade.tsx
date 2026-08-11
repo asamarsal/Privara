@@ -8,17 +8,13 @@ import { LottieLoader } from './common/LottieLoader';
 import { Modal } from './Modal';
 import { useFtsoPrice } from '../hooks/useFtsoPrice';
 
-const stats = [
-  { label: 'Funding / 8h', value: '0.0100%', sub: '', green: true },
-];
-
 const ORDER_TYPES = ['Market', 'Limit', 'Stop'];
 
 // Promise to ensure TradingView script is only loaded once
 let tvScriptLoadingPromise: Promise<void> | null = null;
 
 export function AdvancedTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
-  const { isConnected } = useAccount();
+  const { isConnected, chainId } = useAccount();
   const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<'buy' | 'sell'>('buy');
   const [orderType, setOrderType] = useState('Limit');
@@ -124,24 +120,16 @@ export function AdvancedTrade({ viewToggle }: { viewToggle?: React.ReactNode }) 
           }}>
             {/* Symbol */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-              <span style={{ fontWeight: 800, fontSize: 'var(--font-size-lg)' }}>FXRP / USDT</span>
+              <span style={{ fontWeight: 800, fontSize: 'var(--font-size-lg)' }}>FXRP / USDT0</span>
               <span style={{ color: 'var(--color-warning)', cursor: 'pointer' }}>★</span>
             </div>
 
-            {/* Stats */}
-            {stats.map((s) => (
-              <div key={s.label} style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>{s.label}</span>
-                <span style={{
-                  fontSize: 'var(--font-size-sm)',
-                  fontWeight: 600,
-                  fontFamily: 'var(--font-mono)',
-                  color: s.green ? 'var(--color-success)' : 'var(--color-text-primary)',
-                }}>
-                  {s.value} {s.sub && <span style={{ color: 'var(--color-text-muted)', fontSize: '10px' }}>{s.sub}</span>}
-                </span>
-              </div>
-            ))}
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>Execution Model</span>
+              <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--color-success)' }}>
+                Exact-fill
+              </span>
+            </div>
 
             {/* Expand icon */}
             <div 
@@ -248,21 +236,14 @@ export function AdvancedTrade({ viewToggle }: { viewToggle?: React.ReactNode }) 
 
           {/* Market / Limit / Stop sub-tabs */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 0, borderBottom: '1px solid var(--color-border)', marginBottom: 'var(--space-4)' }}>
-            {ORDER_TYPES.map(t => (
-              <button key={t} onClick={() => setOrderType(t)} style={{
-                padding: 'var(--space-2) var(--space-3)',
-                background: 'transparent',
-                border: 'none',
-                borderBottom: `2px solid ${orderType === t ? 'var(--color-accent-primary)' : 'transparent'}`,
-                color: orderType === t ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
-                fontWeight: orderType === t ? 600 : 400,
-                fontSize: 'var(--font-size-sm)',
-                cursor: 'pointer',
-                transition: 'all var(--transition-fast)',
-                marginBottom: '-1px',
-              }}>
-                {t}
-              </button>
+            {ORDER_TYPES.map(type => (
+              <button key={type} type="button" onClick={() => setOrderType(type)} style={{
+                padding: 'var(--space-2) var(--space-3)', background: 'transparent', border: 'none',
+                borderBottom: `2px solid ${orderType === type ? 'var(--color-accent-primary)' : 'transparent'}`,
+                color: orderType === type ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+                fontWeight: orderType === type ? 600 : 400, fontSize: 'var(--font-size-sm)', cursor: 'pointer',
+                transition: 'all var(--transition-fast)', marginBottom: '-1px',
+              }}>{type}</button>
             ))}
             <span 
               onClick={() => setIsInfoModalOpen(true)}
@@ -306,7 +287,7 @@ export function AdvancedTrade({ viewToggle }: { viewToggle?: React.ReactNode }) 
                     Understanding Order Types
                   </h4>
                   <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
-                    Choose the right execution strategy for your trades based on price certainty and execution speed.
+                    Limit uses a committed price bound. Market uses a 1% FTSOv2 collar. Stop remains dormant until its FTSOv2 trigger is reached, then executes as a stop-limit order.
                   </p>
                 </div>
               </div>
@@ -318,7 +299,7 @@ export function AdvancedTrade({ viewToggle }: { viewToggle?: React.ReactNode }) 
                   <div>
                     <strong style={{ color: 'var(--color-text-primary)' }}>Market Order: </strong>
                     <span style={{ color: 'var(--color-text-secondary)' }}>
-                      Executed immediately at the current market price. Guarantees execution but not a specific price.
+                       Uses a committed 1% collar around the live FTSOv2 price. Execution is protected but not guaranteed to be immediate.
                     </span>
                   </div>
                 </div>
@@ -338,7 +319,7 @@ export function AdvancedTrade({ viewToggle }: { viewToggle?: React.ReactNode }) 
                   <div>
                     <strong style={{ color: 'var(--color-text-primary)' }}>Stop Order: </strong>
                     <span style={{ color: 'var(--color-text-secondary)' }}>
-                      Becomes a market order when the asset reaches a specified stop price. Often used to limit losses or protect profits.
+                       A stop-limit order that becomes eligible when the live FTSOv2 price reaches the committed trigger.
                     </span>
                   </div>
                 </div>
@@ -373,7 +354,6 @@ export function AdvancedTrade({ viewToggle }: { viewToggle?: React.ReactNode }) 
             {activeTab === 'buy' ? <BuyOrderForm orderType={orderType} /> : <SellOrderForm orderType={orderType} />}
           </div>
 
-          {/* Security badge */}
           <div style={{
             marginTop: 'var(--space-4)',
             display: 'flex',
@@ -384,7 +364,7 @@ export function AdvancedTrade({ viewToggle }: { viewToggle?: React.ReactNode }) 
             fontSize: '11px',
           }}>
             <span>🛡️</span>
-            <span>Your order is secured by <strong style={{ color: 'var(--color-accent-primary)' }}>Privara Shield</strong></span>
+            <span>local_mock uses a <strong style={{ color: 'var(--color-accent-primary)' }}>signed plaintext payload + on-chain hash</strong></span>
             <span style={{ cursor: 'pointer' }}>ⓘ</span>
           </div>
         </div>
@@ -407,8 +387,8 @@ export function AdvancedTrade({ viewToggle }: { viewToggle?: React.ReactNode }) 
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-success)', boxShadow: '0 0 6px var(--color-success)' }} />
-          <span style={{ color: 'var(--color-text-muted)' }}>Network</span>
-          <span style={{ color: 'var(--color-text-primary)' }}>Coston2</span>
+           <span style={{ color: 'var(--color-text-muted)' }}>Wallet</span>
+           <span style={{ color: chainId === 114 ? 'var(--color-success)' : 'var(--color-error)' }}>{!isConnected ? 'Disconnected' : chainId === 114 ? 'Coston2' : `Wrong network (${chainId})`}</span>
         </div>
 
         <div>
@@ -418,14 +398,14 @@ export function AdvancedTrade({ viewToggle }: { viewToggle?: React.ReactNode }) 
         </div>
 
         <div>
-          <span style={{ color: 'var(--color-text-muted)' }}>Funding / 8h </span>
-          <span style={{ color: 'var(--color-success)' }}>0.0100%</span>
+          <span style={{ color: 'var(--color-text-muted)' }}>Order Types </span>
+          <span style={{ color: 'var(--color-success)' }}>Market · Limit · Stop</span>
         </div>
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
-          <span style={{ color: 'var(--color-text-muted)' }}>System Status</span>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-success)', boxShadow: '0 0 6px var(--color-success)' }} />
-          <span style={{ color: 'var(--color-success)' }}>All Systems Operational</span>
+          <span style={{ color: 'var(--color-text-muted)' }}>Deployment</span>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: isConnected && chainId === 114 ? 'var(--color-success)' : 'var(--color-warning)', boxShadow: `0 0 6px ${isConnected && chainId === 114 ? 'var(--color-success)' : 'var(--color-warning)'}` }} />
+          <span style={{ color: isConnected && chainId === 114 ? 'var(--color-success)' : 'var(--color-warning)' }}>{isConnected && chainId === 114 ? 'V2 Coston2' : 'Wallet action required'}</span>
         </div>
       </div>
     </div>

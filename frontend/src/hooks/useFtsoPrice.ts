@@ -1,49 +1,31 @@
 import { useReadContract } from 'wagmi';
-import { parseAbi, formatUnits, parseEther } from 'viem';
+import { parseAbi, formatUnits, parseUnits } from 'viem';
+import { deployment } from '../config/deployment';
 
 const ftsoV2Abi = parseAbi([
   'function getFeedById(bytes21 _feedId) external payable returns (uint256 _value, int8 _decimals, uint64 _timestamp)'
 ]);
 
 export function useFtsoPrice() {
-  const ftsoAddress = process.env.NEXT_PUBLIC_FTSO_V2_ADDRESS as `0x${string}`;
-  const feedId = process.env.NEXT_PUBLIC_XRP_USD_FEED_ID as `0x${string}`;
-
-  const { data, isError, isLoading } = useReadContract({
-    address: ftsoAddress,
+  const { data, isError, isLoading, error } = useReadContract({
+    address: deployment.ftsoV2,
     abi: ftsoV2Abi,
     functionName: 'getFeedById',
-    args: [feedId],
-    query: {
-      refetchInterval: 10000, // Refetch every 10 seconds
-    }
+    args: [deployment.feedId],
+    chainId: deployment.chainId,
+    query: { refetchInterval: 10_000 },
   });
 
-  // Default mock price if loading or error
-  let priceFormatted = '1.0658';
-  let priceBigInt = parseEther('1.0658');
+  if (isError) return { status: 'error' as const, priceFormatted: '—', priceBigInt: 0n, timestamp: 0, isLoading: false, isError: true, error };
+  if (isLoading || !data) return { status: 'loading' as const, priceFormatted: '—', priceBigInt: 0n, timestamp: 0, isLoading: true, isError: false };
 
-  if (data) {
-    const [value, decimals, timestamp] = data as [bigint, number, bigint];
-    
-    // FTSO decimals are usually negative, e.g., -5, meaning we need to shift by 5
-    // But IFtsoV2 usually returns positive decimals like 5, meaning the value has 5 decimal places.
-    // e.g. value = 106580, decimals = 5 -> 1.0658
-    // viem's formatUnits takes the number of decimals
-    
-    // Convert int8 decimals to absolute number (viem might return it as number or bigint)
-    const dec = Math.abs(Number(decimals)); 
-    
-    priceFormatted = formatUnits(value, dec);
-    
-    // Convert the exact price to an 18-decimal bigint for standard math in our app
-    priceBigInt = parseEther(priceFormatted);
-  }
-
-  return {
-    priceFormatted,
-    priceBigInt,
-    isLoading,
-    isError
-  };
+  const [value, decimals, rawTimestamp] = data as [bigint, number, bigint];
+  const decimalsNumber = Number(decimals);
+  if (value <= 0n || decimalsNumber < 0 || decimalsNumber > 18) return { status: 'error' as const, priceFormatted: '—', priceBigInt: 0n, timestamp: Number(rawTimestamp), isLoading: false, isError: true };
+  const timestamp = Number(rawTimestamp);
+  const age = Math.floor(Date.now() / 1000) - timestamp;
+  const priceFormatted = formatUnits(value, decimalsNumber);
+  const priceBigInt = parseUnits(priceFormatted, 18);
+  if (age < 0 || age > 300) return { status: 'stale' as const, priceFormatted, priceBigInt, timestamp, isLoading: false, isError: true };
+  return { status: 'live' as const, priceFormatted, priceBigInt, timestamp, isLoading: false, isError: false };
 }

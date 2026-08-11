@@ -1,27 +1,36 @@
-import React, { useState } from 'react';
-import { useWriteContract } from 'wagmi';
+import React, { useEffect, useState } from 'react';
+import { useAccount, useWriteContract, usePublicClient } from 'wagmi';
 import { TransactionState } from './TransactionState';
 import { parseAbi, parseEther, formatEther } from 'viem';
 import { useNetwork } from '../hooks/useNetwork';
 import { useVaultBalance } from '../hooks/useVaultBalance';
+import { deployment, isAuditedV2Deployment } from '../config/deployment';
+import { useQueryClient } from '@tanstack/react-query';
 
 const vaultAbi = parseAbi([
   'function withdraw(address token, uint256 amount)'
 ]);
 
-export const WithdrawalForm: React.FC = () => {
+export const WithdrawalForm: React.FC<{ initialToken?: 'FXRP' | 'USDT0' }> = ({ initialToken = 'FXRP' }) => {
+  const { address } = useAccount();
   const { isCorrectNetwork } = useNetwork();
-  const { fxrpBalance, usdt0Balance, refetch } = useVaultBalance();
-  const [token, setToken] = useState<'FXRP' | 'USDT0'>('FXRP');
+  const publicClient = usePublicClient();
+  const queryClient = useQueryClient();
+  const {
+    fxrpBalance, usdt0Balance, fxrpLockedBalance, usdt0LockedBalance,
+    fxrpAvailableBalance, usdt0AvailableBalance, isLoading, isError, refetch
+  } = useVaultBalance();
+  const [token, setToken] = useState<'FXRP' | 'USDT0'>(initialToken);
+  useEffect(() => setToken(initialToken), [initialToken]);
   const [amountStr, setAmountStr] = useState('');
   const [error, setError] = useState('');
 
-  const vaultAddress = "0xa479Bc0C4B000D0dcD6FaC3BB9E71B830eBE048E";
-  const fxrpAddress = "0x12967a98792fc53Fb39E91d9B69917B5D32fb011";
-  const usdt0Address = "0xDC7E830282489f5e461C4bfC0deE292fD9591C86";
+  const { vault: vaultAddress, fxrp: fxrpAddress, usdt0: usdt0Address } = deployment;
 
   const tokenAddress = token === 'FXRP' ? fxrpAddress : usdt0Address;
   const vaultTokenBalance = token === 'FXRP' ? fxrpBalance : usdt0Balance;
+  const lockedBalance = token === 'FXRP' ? fxrpLockedBalance : usdt0LockedBalance;
+  const availableBalance = token === 'FXRP' ? fxrpAvailableBalance : usdt0AvailableBalance;
 
   const { writeContractAsync: writeWithdraw } = useWriteContract();
 
@@ -52,8 +61,8 @@ export const WithdrawalForm: React.FC = () => {
 
     try {
       const parsed = parseEther(val);
-      if (vaultTokenBalance && parsed > vaultTokenBalance) {
-        setError('Amount exceeds vault balance');
+      if (availableBalance !== undefined && parsed > availableBalance) {
+        setError('Amount exceeds available balance');
         return null;
       }
       return parsed;
@@ -64,8 +73,8 @@ export const WithdrawalForm: React.FC = () => {
   };
 
   const handleMax = () => {
-    if (vaultTokenBalance) {
-      setAmountStr(formatEther(vaultTokenBalance));
+    if (availableBalance !== undefined) {
+      setAmountStr(formatEther(availableBalance));
     }
   };
 
@@ -74,6 +83,8 @@ export const WithdrawalForm: React.FC = () => {
     if (!parsedAmount) return;
 
     try {
+      if (!isAuditedV2Deployment) throw new Error('Writes are disabled until PrivaraVault V2 is deployed on Coston2');
+      if (!address || !isCorrectNetwork || !publicClient) throw new Error('Connect a wallet on Coston2');
       setTxState('awaiting_approval');
       setTxError('');
       setTxHash(undefined);
@@ -82,15 +93,17 @@ export const WithdrawalForm: React.FC = () => {
         address: vaultAddress,
         abi: vaultAbi,
         functionName: 'withdraw',
-        args: [tokenAddress, parsedAmount]
+        args: [tokenAddress, parsedAmount],
+        chainId: 114,
       });
 
       setTxHash(withdrawHash);
       setTxState('pending');
-
-      // Simulating wait for MVP
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: withdrawHash });
+      if (receipt.status !== 'success') throw new Error('Withdrawal reverted');
       setTxState('success');
-      refetch();
+      await refetch();
+      await queryClient.invalidateQueries({ queryKey: ['readContract'] });
     } catch (err: any) {
       setTxState('error');
       setTxError(err.message || 'Transaction failed');
@@ -118,15 +131,21 @@ export const WithdrawalForm: React.FC = () => {
         </button>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-        <span>Vault Balance</span>
-        <span>{vaultTokenBalance ? formatEther(vaultTokenBalance) : '0.0'} {token}</span>
+      <div style={{ display: 'grid', gap: '4px', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }} aria-live="polite">
+        {isLoading ? <span>Loading vault balances…</span> : isError ? <span style={{ color: 'var(--color-error)' }}>Unable to load vault balances.</span> : <>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Available</span><span>{formatEther(availableBalance ?? 0n)} {token}</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Locked</span><span>{formatEther(lockedBalance ?? 0n)} {token}</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Total</span><span>{formatEther(vaultTokenBalance ?? 0n)} {token}</span></div>
+        </>}
       </div>
 
       <div>
         <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          <label htmlFor="withdraw-amount" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Withdrawal amount in {token}</label>
           <input
+            id="withdraw-amount"
             type="text"
+            inputMode="decimal"
             className="input-field"
             placeholder="0.00"
             value={amountStr}
@@ -144,7 +163,7 @@ export const WithdrawalForm: React.FC = () => {
         className="btn-premium-sell"
         style={{ width: '100%', padding: '14px', fontSize: '15px' }}
         onClick={handleWithdraw}
-        disabled={!amountStr || !!error || !isCorrectNetwork || txState === 'awaiting_approval' || txState === 'pending' || !vaultTokenBalance || vaultTokenBalance === 0n}
+        disabled={!isAuditedV2Deployment || !address || !amountStr || !!error || !isCorrectNetwork || isLoading || isError || txState === 'awaiting_approval' || txState === 'pending' || availableBalance === undefined || availableBalance === 0n}
       >
         Withdraw {token}
       </button>

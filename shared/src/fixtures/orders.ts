@@ -78,6 +78,8 @@ export const FIXTURE_MATCH_RESULT: MatchResult = {
   matchId: '0x0000000000000000000000000000000000000000000000000000000000000abc',
   buyOrderId: FIXTURE_BUY_ORDER.orderId,
   sellOrderId: FIXTURE_SELL_ORDER.orderId,
+  buyCommitment: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  sellCommitment: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   executionPrice: execPrice,
   fxrpAmount: fxrpAmount,
   quoteAmount: execQuoteAmount,

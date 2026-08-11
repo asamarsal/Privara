@@ -1,178 +1,156 @@
 import { ethers } from "ethers";
 import { Indexer } from "../indexer/indexer";
 import { InFlightTracker } from "./inflightTracker";
-import { IFccAdapter } from "../fcc/types";
+import { IFccAdapter, MatchPairResult } from "../fcc/types";
 import { selectCandidatePair } from "./candidateSelector";
+import { OrderPayloadRegistry } from "./orderPayloadRegistry";
 import { logger } from "../logger";
 import { getConfig } from "../config";
+import { computeOrderCommitment, OrderSide, OrderType } from "@privara/shared";
+import { OpenOrder } from "../indexer/indexer";
 
-const PrivaraVaultABI = [
-  "function settle(tuple(bytes32 matchId, bytes32 buyOrderId, bytes32 sellOrderId, uint256 executionPrice, uint256 fxrpAmount, uint256 quoteAmount, uint64 expiry, uint256 chainId, address vaultAddress) result, bytes calldata fccProofOrSignature) external",
-  "function usedMatches(bytes32) view returns (bool)"
+const VaultABI = [
+  "function settle(tuple(bytes32 matchId,bytes32 buyOrderId,bytes32 sellOrderId,uint256 executionPrice,uint256 fxrpAmount,uint256 quoteAmount,uint64 matchExpiry,bytes signature) params) external",
+  "function isMatchSettled(bytes32) view returns (bool)",
+  "function authorizedVerifier() view returns (address)",
+  "function verifier() view returns (address)",
+  "function FXRP() view returns (address)",
+  "function USDT0() view returns (address)",
 ];
 
 export class MatcherService {
-  private indexer: Indexer;
-  private tracker: InFlightTracker;
-  private fccAdapter: IFccAdapter;
-  private contract: ethers.Contract;
-  private isRunning: boolean = false;
-  private wallet: ethers.Wallet;
+  private readonly tracker = new InFlightTracker();
+  private readonly contract: ethers.Contract;
+  private readonly terminalPairs = new Set<string>();
+  private isRunning = false;
 
   constructor(
-    provider: ethers.Provider,
-    indexer: Indexer,
-    fccAdapter: IFccAdapter,
+    private readonly indexer: Indexer,
+    private readonly payloads: OrderPayloadRegistry,
+    private readonly fccAdapter: IFccAdapter,
     wallet: ethers.Wallet,
     vaultAddress: string
   ) {
-    this.indexer = indexer;
-    this.tracker = new InFlightTracker();
-    this.fccAdapter = fccAdapter;
-    this.wallet = wallet;
-    this.contract = new ethers.Contract(vaultAddress, PrivaraVaultABI, this.wallet);
+    this.contract = new ethers.Contract(vaultAddress, VaultABI, wallet);
+  }
+
+  public async validateConfiguration(): Promise<void> {
+    const adapterSigner = await this.fccAdapter.getSignerAddress();
+    if (this.fccAdapter.mode === "local_mock") {
+      const authorized = await this.contract.authorizedVerifier();
+      if (!adapterSigner || authorized.toLowerCase() !== adapterSigner.toLowerCase()) throw new Error(`Mock FCC signer mismatch: vault authorizes ${authorized}, adapter uses ${adapterSigner}`);
+    }
   }
 
   public async start(): Promise<void> {
     if (this.isRunning) return;
+    await this.validateConfiguration();
     this.isRunning = true;
-    
-    // Subscribe to new events
     this.indexer.subscribeToNewEvents();
-
-    // Start loops
-    this.mainLoop();
+    void this.mainLoop();
   }
 
-  public stop(): void {
-    this.isRunning = false;
+  public stop(): void { this.isRunning = false; }
+
+  private pairKey(buy: string, sell: string) { return `${buy.toLowerCase()}:${sell.toLowerCase()}`; }
+
+  private payloadMatchesChain(orderId: string, onChain: OpenOrder): boolean {
+    const order = this.payloads.getOrder(orderId);
+    if (!order) return false;
+    const expectedSide = onChain.side === 0 ? OrderSide.buy : OrderSide.sell;
+    return order.orderId.toLowerCase() === onChain.orderId.toLowerCase()
+      && order.maker.toLowerCase() === onChain.maker.toLowerCase()
+      && order.side === expectedSide
+      && order.tokenIn.toLowerCase() === onChain.tokenIn.toLowerCase()
+      && order.amountIn === onChain.amountIn
+      && order.expiry === onChain.expiry
+      && computeOrderCommitment(order).toLowerCase() === onChain.encryptedCommitment.toLowerCase();
   }
 
   private async mainLoop(): Promise<void> {
     const config = getConfig();
-    
     while (this.isRunning) {
-      try {
-        await this.processCandidates();
-      } catch (err) {
-        logger.error("Error in matcher loop", { error: (err as Error).message });
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, config.POLL_INTERVAL_MS));
+      try { await this.processCandidates(); }
+      catch (error) { logger.error("Matcher loop failed", { error: (error as Error).message }); }
+      await new Promise(resolve => setTimeout(resolve, config.POLL_INTERVAL_MS));
     }
   }
 
-  private async processCandidates(): Promise<void> {
-    const config = getConfig();
-    const chainId = Number((await this.wallet.provider!.getNetwork()).chainId);
-    const vaultAddress = await this.contract.getAddress();
-
-    // 1. Clean up expired inflight tracking
-    this.tracker.removeExpired(config.POLL_TIMEOUT_MS);
-
-    // 2. Select pair
-    const orderBook = this.indexer.getOrderBook();
-    const pair = selectCandidatePair(orderBook);
-
-    if (!pair) {
+  public async processCandidates(): Promise<void> {
+    const pair = selectCandidatePair(this.indexer.getOrderBook(), this.terminalPairs, orderId => this.payloads.has(orderId));
+    if (!pair) return;
+    const key = this.pairKey(pair.buy.orderId, pair.sell.orderId);
+    if (this.tracker.has(pair.buy.orderId, pair.sell.orderId)) return;
+    const buyPayload = this.payloads.get(pair.buy.orderId);
+    const sellPayload = this.payloads.get(pair.sell.orderId);
+    if (!buyPayload || !sellPayload) return;
+    if (!this.payloadMatchesChain(pair.buy.orderId, pair.buy) || !this.payloadMatchesChain(pair.sell.orderId, pair.sell)) {
+      logger.warn("Ignoring payload that does not reconcile with its on-chain order", { buyId: pair.buy.orderId, sellId: pair.sell.orderId });
+      this.terminalPairs.add(key);
       return;
     }
-
-    if (this.tracker.has(pair.buy.orderId, pair.sell.orderId)) {
-      // Already in flight
-      return;
-    }
-
-    logger.info("Found candidate pair", { buy: pair.buy.orderId, sell: pair.sell.orderId });
-
-    // 3. Submit to FCC
-    try {
-      const requestId = await this.fccAdapter.submitMatchPair({
-        buyOrderCiphertext: pair.buy.encryptedCommitment,
-        sellOrderCiphertext: pair.sell.encryptedCommitment,
-        chainId,
-        vaultAddress,
-      });
-
-      this.tracker.add({
-        buyOrderId: pair.buy.orderId,
-        sellOrderId: pair.sell.orderId,
-        requestId,
-        submittedAt: Date.now()
-      });
-
-      // Fire-and-forget the poll and settle flow
-      this.pollAndSettle(requestId, pair.buy.orderId, pair.sell.orderId);
-
-    } catch (err) {
-      logger.error("Failed to submit to FCC", { error: (err as Error).message });
-    }
-  }
-
-  private async pollAndSettle(requestId: string, buyOrderId: string, sellOrderId: string): Promise<void> {
-    const config = getConfig();
-    const maxAttempts = config.POLL_TIMEOUT_MS / config.POLL_INTERVAL_MS;
-    
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      if (!this.isRunning) break;
-
-      try {
-        const result = await this.fccAdapter.pollResult(requestId);
-
-        if (result) {
-          if (result.status === "COMPATIBLE") {
-            await this.submitSettlement(result);
-          } else {
-            logger.info("Pair incompatible", { buyOrderId, sellOrderId });
-          }
-
-          // We got a result, clean up tracker
-          this.tracker.remove(buyOrderId, sellOrderId);
-          return;
-        }
-
-      } catch (err) {
-        logger.error("Error polling FCC", { requestId, error: (err as Error).message });
-      }
-
-      await new Promise(res => setTimeout(res, config.POLL_INTERVAL_MS));
-    }
-
-    logger.warn("Poll timeout for request", { requestId });
-    this.tracker.remove(buyOrderId, sellOrderId);
-  }
-
-  private async submitSettlement(result: any): Promise<void> {
-    logger.info("Submitting settlement", { matchId: result.matchId });
-
-    try {
-      const used = await this.contract.usedMatches(result.matchId);
-      if (used) {
-        logger.info("Match already settled", { matchId: result.matchId });
+    if (this.fccAdapter.mode === "remote") {
+      const buyOrder = this.payloads.getOrder(pair.buy.orderId)!;
+      const sellOrder = this.payloads.getOrder(pair.sell.orderId)!;
+      if (buyOrder.orderType !== OrderType.limit || sellOrder.orderType !== OrderType.limit) {
+        // Remote FCC has not attested Market/Stop semantics yet: fail closed.
+        this.terminalPairs.add(key);
+        logger.warn("Remote FCC does not support Market/Stop orders", { buyId: pair.buy.orderId, sellId: pair.sell.orderId });
         return;
       }
-
-      const tx = await this.contract.settle(
-        {
-          matchId: result.matchId,
-          buyOrderId: result.buyOrderId,
-          sellOrderId: result.sellOrderId,
-          executionPrice: result.executionPrice,
-          fxrpAmount: result.fxrpAmount,
-          quoteAmount: result.quoteAmount,
-          expiry: result.expiry,
-          chainId: result.chainId,
-          vaultAddress: result.vaultAddress,
-        },
-        result.signature
-      );
-
-      logger.info("Settlement transaction sent", { hash: tx.hash });
-      const receipt = await tx.wait();
-      logger.info("Settlement transaction mined", { blockNumber: receipt.blockNumber, hash: tx.hash });
-
-    } catch (err) {
-      logger.error("Settlement failed", { error: (err as Error).message });
     }
+
+    const network = await this.contract.runner!.provider!.getNetwork();
+    const vaultAddress = await this.contract.getAddress();
+    const requestId = await this.fccAdapter.submitMatchPair({
+      buyOrderPayload: buyPayload,
+      sellOrderPayload: sellPayload,
+      buyCommitment: pair.buy.encryptedCommitment,
+      sellCommitment: pair.sell.encryptedCommitment,
+      chainId: Number(network.chainId),
+      vaultAddress,
+    });
+    this.tracker.add({ buyOrderId: pair.buy.orderId, sellOrderId: pair.sell.orderId, requestId, submittedAt: Date.now() });
+    void this.pollAndSettle(requestId, pair.buy.orderId, pair.sell.orderId, key);
+  }
+
+  private async pollAndSettle(requestId: string, buyId: string, sellId: string, key: string): Promise<void> {
+    const config = getConfig();
+    const deadline = Date.now() + config.POLL_TIMEOUT_MS;
+    try {
+      while (this.isRunning && Date.now() < deadline) {
+        const result = await this.fccAdapter.pollResult(requestId);
+        if (!result) { await new Promise(resolve => setTimeout(resolve, config.POLL_INTERVAL_MS)); continue; }
+        if (result.status === "INCOMPATIBLE") {
+          this.terminalPairs.add(key);
+          logger.info("Pair incompatible", { buyId, sellId, reason: result.reason });
+          return;
+        }
+        await this.submitSettlement(result);
+        return;
+      }
+      logger.warn("FCC poll timeout", { requestId });
+    } catch (error) {
+      logger.error("FCC/settlement job failed", { requestId, error: (error as Error).message });
+    } finally {
+      this.tracker.remove(buyId, sellId);
+    }
+  }
+
+  private async submitSettlement(result: Extract<MatchPairResult, { status: "COMPATIBLE" }>): Promise<void> {
+    if (await this.contract.isMatchSettled(result.matchId)) return;
+    const tx = await this.contract.settle({
+      matchId: result.matchId,
+      buyOrderId: result.buyOrderId,
+      sellOrderId: result.sellOrderId,
+      executionPrice: BigInt(result.executionPrice),
+      fxrpAmount: BigInt(result.fxrpAmount),
+      quoteAmount: BigInt(result.quoteAmount),
+      matchExpiry: result.expiry,
+      signature: result.signature,
+    });
+    const receipt = await tx.wait();
+    if (!receipt || receipt.status !== 1) throw new Error(`Settlement ${tx.hash} reverted`);
+    logger.info("Settlement confirmed", { hash: tx.hash, blockNumber: receipt.blockNumber });
   }
 }

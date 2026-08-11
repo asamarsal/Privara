@@ -2,8 +2,9 @@ import React from 'react';
 import { useActivity } from '../../hooks/useActivity';
 import { formatEther } from 'viem';
 import { LottieLoader } from '../common/LottieLoader';
+import { deployment } from '../../config/deployment';
 
-const EXPLORER = 'https://coston2-explorer.flare.network';
+const EXPLORER = deployment.explorerUrl;
 
 function DetailRow({ label, value, isLink }: { label: string; value: string; isLink?: boolean }) {
   return (

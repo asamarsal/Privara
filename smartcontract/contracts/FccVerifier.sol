@@ -7,20 +7,21 @@ import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 /**
  * @title FccVerifier
- * @notice Adapter for the official Flare Confidential Compute verifier.
- * @dev In the local mock mode, this does ECDSA recovery matching the Node mock behavior.
+ * @notice Local-mock ECDSA verifier used by the Coston2 hackathon prototype.
+ * @dev This contract does not call the official FCC verifier. Production FCC proof
+ * verification requires a separate adapter after the official ABI is pinned.
  */
 contract FccVerifier is IVerifier {
     using ECDSA for bytes32;
     
-    address public immutable officialVerifier;
+    address public immutable reservedOfficialVerifier;
 
-    constructor(address _officialVerifier) {
-        officialVerifier = _officialVerifier;
+    constructor(address _reservedOfficialVerifier) {
+        reservedOfficialVerifier = _reservedOfficialVerifier;
     }
 
     /**
-     * @notice Verifies a match result signed by the TEE.
+     * @notice Recovers the signer of a local-mock match result.
      * @param digest The MatchResult digest.
      * @param signature The signature from the TEE.
      * @return signer The address recovered from the signature.
@@ -29,9 +30,7 @@ contract FccVerifier is IVerifier {
         bytes32 digest,
         bytes calldata signature
     ) external pure returns (address signer) {
-        // In local mock mode, the TEE node uses standard ECDSA over the digest
-        // Note: The actual Flare FCC verifier on-chain might have a different ABI and we would call it here.
-        // For local development, this faithfully replicates TestVerifier behavior while fulfilling the FccVerifier adapter shape.
+        // Local mock uses EIP-191 personal signing over the V2 settlement digest.
         return MessageHashUtils.toEthSignedMessageHash(digest).recover(signature);
     }
 }

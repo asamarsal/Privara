@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { TopMetrics } from '../components/portfolio/TopMetrics';
@@ -11,11 +11,38 @@ import { ActivityFeed } from '../components/portfolio/ActivityFeed';
 import { Modal } from '../components/Modal';
 import { DepositForm } from '../components/DepositForm';
 import { WithdrawalForm } from '../components/WithdrawalForm';
+import { useAccount } from 'wagmi';
+import { useActivity } from '../hooks/useActivity';
 
 export default function PortfolioPage() {
+  const { isConnected } = useAccount();
   const router = useRouter();
   const [showManageModal, setShowManageModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'deposit' | 'withdraw'>('deposit');
+  const { error: portfolioError, refresh, freshness } = useActivity();
+  const tokenQuery = Array.isArray(router.query.token) ? router.query.token[0] : router.query.token;
+  const normalizedToken = tokenQuery?.toUpperCase();
+  const requestedToken = normalizedToken === 'USDT0' ? 'USDT0' : 'FXRP';
+  const actionQuery = Array.isArray(router.query.action) ? router.query.action[0] : router.query.action;
+
+  useEffect(() => {
+    if (!router.isReady) return;
+    if (actionQuery === 'deposit' || actionQuery === 'withdraw') {
+      setActiveTab(actionQuery);
+      setShowManageModal(true);
+    }
+  }, [router.isReady, actionQuery, tokenQuery]);
+
+  const closeManageModal = () => {
+    setShowManageModal(false);
+    if (router.query.action || router.query.token) {
+      void router.replace('/portfolio', undefined, { shallow: true });
+    }
+  };
+
+  if (!isConnected) {
+    return <div className="page-container" style={{ textAlign: 'center', paddingTop: '80px' }}><h2>Connect Your Wallet</h2><p style={{ color: 'var(--color-text-secondary)' }}>Connect on Coston2 to view and manage vault balances.</p></div>;
+  }
 
   return (
     <>
@@ -28,11 +55,21 @@ export default function PortfolioPage() {
         <h1 className="page-title-responsive" style={{ margin: 0 }}>Dashboard</h1>
         <button 
           onClick={() => setShowManageModal(true)}
-          style={{ background: 'var(--color-accent-primary)', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}
+          className="btn-premium-primary"
         >
           Manage Vault
         </button>
       </div>
+
+      {portfolioError && (
+        <div role="alert" style={{ marginBottom: '16px', padding: '12px 14px', borderRadius: '10px', border: '1px solid var(--color-error)', background: 'var(--color-error-bg)', color: 'var(--color-text-secondary)', display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}>
+          <span>Portfolio indexer unavailable: {portfolioError}. Indexed orders and metrics are unknown, not zero.</span>
+          <button type="button" className="btn-premium-secondary" onClick={() => void refresh()} style={{ padding: '8px 12px', flexShrink: 0 }}>Retry</button>
+        </div>
+      )}
+      {freshness?.indexedBlock !== undefined && (
+        <div style={{ marginBottom: '12px', color: 'var(--color-text-muted)', fontSize: '11px' }}>Indexer data through block {freshness.indexedBlock}</div>
+      )}
 
       <TopMetrics />
 
@@ -59,7 +96,7 @@ export default function PortfolioPage() {
       </div>
     </div>
     
-    <Modal isOpen={showManageModal} onClose={() => setShowManageModal(false)} title="Vault Operations">
+    <Modal isOpen={showManageModal} onClose={closeManageModal} title="Vault Operations">
       <div style={{ display: 'flex', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '4px', marginBottom: '20px' }}>
         <button 
           onClick={() => setActiveTab('deposit')}
@@ -97,8 +134,8 @@ export default function PortfolioPage() {
         </button>
       </div>
 
-      {activeTab === 'deposit' && <DepositForm />}
-      {activeTab === 'withdraw' && <WithdrawalForm />}
+      {activeTab === 'deposit' && <DepositForm initialToken={requestedToken} />}
+      {activeTab === 'withdraw' && <WithdrawalForm initialToken={requestedToken} />}
     </Modal>
     </>
   );

@@ -1,223 +1,93 @@
 import React, { useState } from 'react';
-import { useAccount, useWriteContract } from 'wagmi';
-import { parseAbi, parseEther } from 'viem';
+import { useAccount, usePublicClient, useReadContracts, useWriteContract } from 'wagmi';
+import { useQueryClient } from '@tanstack/react-query';
+import { formatEther, parseAbi } from 'viem';
 import { useNetwork } from '../hooks/useNetwork';
+import { deployment, isAuditedV2Deployment } from '../config/deployment';
 
-const erc20Abi = parseAbi(['function mint(address to, uint256 amount) external']);
-
+const tokenAbi = parseAbi([
+  'function claim() external',
+  'function hasClaimed(address account) view returns (bool)',
+  'function faucetAmount() view returns (uint256)'
+]);
 const TOKENS = [
-  { symbol: 'fXRP', address: '0x12967a98792fc53Fb39E91d9B69917B5D32fb011' },
-  { symbol: 'USDT', address: '0xDC7E830282489f5e461C4bfC0deE292fD9591C86' }
-];
+  { symbol: 'FXRP', address: deployment.fxrp },
+  { symbol: 'USDT0', address: deployment.usdt0 },
+] as const;
 
-const PRESET_AMOUNTS = ['1000', '5000', '10000'];
-
-interface ToastState {
-  title: string;
-  message: string;
-  type: 'success' | 'error';
-  txHash?: string;
-}
+interface ToastState { title: string; message: string; type: 'success' | 'error'; txHash?: string }
 
 export const FaucetButton: React.FC = () => {
   const { address } = useAccount();
   const { isCorrectNetwork } = useNetwork();
+  const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
-  
+  const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [selectedToken, setSelectedToken] = useState(TOKENS[0].address);
-  const [amount, setAmount] = useState(PRESET_AMOUNTS[2]); // Default 10000
+  const [selectedToken, setSelectedToken] = useState<(typeof TOKENS)[number]['address']>(TOKENS[0].address);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const selected = TOKENS.find(item => item.address === selectedToken) ?? TOKENS[0];
+  const { data: faucetData, isLoading: faucetLoading, refetch: refetchFaucet } = useReadContracts({
+    contracts: [
+      { address: selected.address, abi: tokenAbi, functionName: 'hasClaimed', args: [address as `0x${string}`] },
+      { address: selected.address, abi: tokenAbi, functionName: 'faucetAmount' },
+    ],
+    query: { enabled: !!address }
+  });
+  const hasClaimed = faucetData?.[0].result as boolean | undefined;
+  const faucetAmount = faucetData?.[1].result as bigint | undefined;
 
   const showToast = (title: string, message: string, type: 'success' | 'error', txHash?: string) => {
     setToast({ title, message, type, txHash });
-    setTimeout(() => {
-      setToast(null);
-    }, 8000);
+    setTimeout(() => setToast(null), 8000);
   };
 
-  const handleMint = async () => {
-    if (!address) return;
+  const handleClaim = async () => {
+    if (!address || !publicClient || !isCorrectNetwork || !isAuditedV2Deployment || hasClaimed) return;
     try {
       setLoading(true);
-      const mintAmount = parseEther(amount);
-      const tokenObj = TOKENS.find(t => t.address.toLowerCase() === selectedToken.toLowerCase()) || TOKENS[0];
-
-      const txHash = await writeContractAsync({
-        address: selectedToken as `0x${string}`,
-        abi: erc20Abi,
-        functionName: 'mint',
-        args: [address, mintAmount]
-      });
-
-      showToast(
-        'Faucet Requested', 
-        `Successfully requested ${amount} ${tokenObj.symbol}!`,
-        'success',
-        txHash
-      );
+      const token = TOKENS.find(item => item.address === selectedToken) ?? TOKENS[0];
+      const hash = await writeContractAsync({ address: token.address, abi: tokenAbi, functionName: 'claim', chainId: deployment.chainId });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status !== 'success') throw new Error('Faucet claim reverted');
+      showToast('Faucet Confirmed', `One-time ${token.symbol} demo allocation received.`, 'success', hash);
+      await refetchFaucet();
+      await queryClient.invalidateQueries({ queryKey: ['readContract'] });
       setIsOpen(false);
-    } catch (err: any) {
-      showToast(
-        'Claim Failed',
-        err.message || 'An error occurred during minting.',
-        'error'
-      );
+    } catch (error: any) {
+      showToast('Claim Failed', error.shortMessage || error.message || 'Faucet claim failed.', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  if (!address || !isCorrectNetwork) return null;
+  if (!address || !isCorrectNetwork || !isAuditedV2Deployment) return null;
 
   return (
     <div style={{ position: 'relative', height: '36px' }}>
-      <button 
-        onClick={() => setIsOpen(!isOpen)} 
-        disabled={loading}
-        className={loading ? "btn-premium-secondary" : "btn-premium-primary"}
-        style={{ 
-          padding: '0 1rem', 
-          fontSize: '14px', 
-          height: '36px',
-          boxSizing: 'border-box'
-        }}
-      >
-        {loading ? 'Minting...' : 'Claim Faucet'}
+      <button onClick={() => setIsOpen(!isOpen)} disabled={loading} className={loading ? 'btn-premium-secondary' : 'btn-premium-primary'} style={{ padding: '0 1rem', fontSize: '14px', height: '36px' }}>
+        {loading ? 'Claiming...' : 'Claim Demo Tokens'}
       </button>
-
-      {/* DROPDOWN DIALOG (THEMED) */}
       {isOpen && (
-        <div style={{
-          position: 'absolute',
-          top: 'calc(100% + 12px)',
-          right: 0,
-          background: 'var(--color-bg-surface)',
-          border: '1px solid var(--color-border)',
-          boxShadow: 'var(--shadow-dropdown)', 
-          borderRadius: '12px',
-          padding: '24px',
-          width: '320px',
-          zIndex: 1000,
-          boxSizing: 'border-box',
-          color: 'var(--color-text-primary)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: 'var(--color-text-primary)' }}>Claim Testnet Tokens</h3>
-            <span style={{ cursor: 'pointer', fontSize: '16px', fontWeight: 'bold', color: 'var(--color-text-secondary)' }} onClick={() => setIsOpen(false)}>✕</span>
+        <div style={{ position: 'absolute', top: 'calc(100% + 12px)', right: 0, background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-dropdown)', borderRadius: '12px', padding: '24px', width: '320px', zIndex: 1000 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <strong>One-time Coston2 Demo Faucet</strong>
+            <button onClick={() => setIsOpen(false)} aria-label="Close faucet" style={{ background: 'none', border: 0, color: 'inherit', cursor: 'pointer' }}>×</button>
           </div>
-          
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--color-text-secondary)' }}>Asset</label>
-            <select 
-              value={selectedToken}
-              onChange={(e) => setSelectedToken(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '12px',
-                background: 'var(--color-bg-select)',
-                border: '1px solid var(--color-border)',
-                color: 'var(--color-text-primary)',
-                borderRadius: '6px',
-                outline: 'none',
-                boxSizing: 'border-box',
-                fontFamily: 'inherit',
-                fontWeight: 600
-              }}
-            >
-              {TOKENS.map(t => (
-                <option key={t.address} value={t.address} style={{ background: 'var(--color-bg-select)', color: 'var(--color-text-primary)' }}>{t.symbol}</option>
-              ))}
-            </select>
-          </div>
-
-          <div style={{ marginBottom: '24px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--color-text-secondary)' }}>Amount</label>
-            <select 
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '12px',
-                background: 'var(--color-bg-select)',
-                border: '1px solid var(--color-border)',
-                color: 'var(--color-text-primary)',
-                borderRadius: '6px',
-                outline: 'none',
-                boxSizing: 'border-box',
-                fontFamily: 'inherit',
-                fontWeight: 600
-              }}
-            >
-              {PRESET_AMOUNTS.map(amt => (
-                <option key={amt} value={amt} style={{ background: 'var(--color-bg-select)', color: 'var(--color-text-primary)' }}>{amt}</option>
-              ))}
-            </select>
-          </div>
-
-          <button 
-            className="btn-premium-primary"
-            onClick={handleMint}
-            disabled={loading || !amount}
-            style={{
-              width: '100%',
-              padding: '12px',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '1px',
-            }}
-          >
-            {loading ? 'Minting...' : 'Mint Now'}
-          </button>
+          <p style={{ color: 'var(--color-text-secondary)', fontSize: '12px' }}>Mock test assets only. Not production-backed FXRP or USDT.</p>
+          <label htmlFor="faucet-token" style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>Demo token</label>
+          <select id="faucet-token" value={selectedToken} onChange={event => setSelectedToken(event.target.value as typeof selectedToken)} style={{ width: '100%', padding: '10px', marginBottom: '12px' }}>
+            {TOKENS.map(token => <option key={token.address} value={token.address}>{token.symbol}</option>)}
+          </select>
+          <p aria-live="polite" style={{ fontSize: '12px' }}>{faucetLoading ? 'Checking eligibility…' : hasClaimed ? `You have already claimed ${selected.symbol}.` : `Available: ${formatEther(faucetAmount ?? 0n)} ${selected.symbol}`}</p>
+          <button onClick={handleClaim} disabled={loading || faucetLoading || !!hasClaimed} className="btn-premium-primary" style={{ width: '100%', padding: '10px' }}>{hasClaimed ? 'Already Claimed' : 'Claim Once'}</button>
         </div>
       )}
-
-      {/* TOP RIGHT TOAST NOTIFICATION (THEMED) */}
       {toast && (
-        <div style={{
-          position: 'fixed',
-          top: '24px',
-          right: '24px',
-          zIndex: 99999,
-          background: 'var(--color-bg-surface)',
-          border: `1px solid ${toast.type === 'success' ? 'var(--color-accent-primary)' : 'var(--color-error)'}`,
-          borderRadius: '10px',
-          padding: '16px 20px',
-          maxWidth: '380px',
-          boxShadow: 'var(--shadow-dropdown)',
-          color: 'var(--color-text-primary)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '14px', color: toast.type === 'success' ? 'var(--color-accent-primary)' : 'var(--color-error)' }}>
-              <span>{toast.type === 'success' ? '✓' : '⚠️'}</span>
-              <span>{toast.title}</span>
-            </div>
-            <span style={{ cursor: 'pointer', fontSize: '14px', color: 'var(--color-text-muted)', marginLeft: '12px' }} onClick={() => setToast(null)}>✕</span>
-          </div>
-
-          <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
-            {toast.message}
-          </p>
-
-          {toast.txHash && (
-            <div style={{ marginTop: '4px', paddingTop: '8px', borderTop: '1px solid var(--color-border)', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>
-                Tx: {toast.txHash.slice(0, 8)}...{toast.txHash.slice(-6)}
-              </span>
-              <a 
-                href={`https://coston2-explorer.flare.network/tx/${toast.txHash}`} 
-                target="_blank" 
-                rel="noreferrer"
-                style={{ color: 'var(--color-accent-primary)', textDecoration: 'none', fontWeight: 600 }}
-              >
-                Explorer ↗
-              </a>
-            </div>
-          )}
+        <div style={{ position: 'fixed', right: '24px', bottom: '24px', zIndex: 2000, padding: '14px', borderRadius: '8px', background: toast.type === 'success' ? 'var(--color-success-bg)' : 'var(--color-error-bg)' }}>
+          <strong>{toast.title}</strong><div>{toast.message}</div>
+          {toast.txHash && <a href={`${deployment.explorerUrl}/tx/${toast.txHash}`} target="_blank" rel="noreferrer">View transaction</a>}
         </div>
       )}
     </div>

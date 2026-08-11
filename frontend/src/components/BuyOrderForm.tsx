@@ -1,14 +1,17 @@
-import React, { useState } from 'react';
-import { useAccount, useWriteContract } from 'wagmi';
+import React, { useEffect, useState } from 'react';
+import { useAccount, useWriteContract, usePublicClient, useSignMessage } from 'wagmi';
 import { Modal } from './Modal';
 import { TransactionState } from './TransactionState';
-import { parseAbi, parseEther, formatEther, keccak256, toHex, stringToHex } from 'viem';
+import { parseAbi, parseEther } from 'viem';
 import { useNetwork } from '../hooks/useNetwork';
 import { useVaultBalance } from '../hooks/useVaultBalance';
-import { OrderSide, Order, hashOrder, encodeOrderForHashing, OrderType } from '@privara/shared';
+import { OrderSide, OrderSchema, hashOrder, orderToWire, OrderType, buyMarketCollar } from '@privara/shared';
+import { createNonce, createOrderId, submitOrderPayload } from '../utils/orderSubmission';
+import { deployment, isAuditedV2Deployment } from '../config/deployment';
 import { saveOrderToHistory } from '../hooks/useActivity';
 import { useToast } from './ToastContext';
 import { useFtsoPrice } from '../hooks/useFtsoPrice';
+import { formatTokenAmount, orderErrorMessage } from '../utils/tokenFormatting';
 
 const vaultAbi = parseAbi([
   'function commitOrder(bytes32 orderId, uint8 side, address tokenIn, uint256 amountIn, bytes32 encryptedCommitment, uint64 expiry)'
@@ -17,90 +20,58 @@ const vaultAbi = parseAbi([
 export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Limit' }) => {
   const { address, isConnected } = useAccount();
   const { isCorrectNetwork } = useNetwork();
-  const { usdt0Balance, refetch } = useVaultBalance();
+  const { usdt0AvailableBalance, refetch } = useVaultBalance();
   const { addToast } = useToast();
-  const { priceFormatted, priceBigInt } = useFtsoPrice();
+  const { status: ftsoStatus, priceBigInt, priceFormatted } = useFtsoPrice();
 
-  const [fxrpAmountStr, setFxrpAmountStr] = useState('');
+  const [budgetStr, setFxrpAmountStr] = useState('');
   const [maxPriceStr, setMaxPriceStr] = useState('');
   const [stopPriceStr, setStopPriceStr] = useState('');
   const [expiryHours, setExpiryHours] = useState('1');
   const [error, setError] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
-  const vaultAddress = "0xa479Bc0C4B000D0dcD6FaC3BB9E71B830eBE048E";
-  const fxrpAddress = "0x12967a98792fc53Fb39E91d9B69917B5D32fb011";
-  const usdt0Address = "0xDC7E830282489f5e461C4bfC0deE292fD9591C86";
+  const { vault: vaultAddress, fxrp: fxrpAddress, usdt0: usdt0Address } = deployment;
 
   const { writeContractAsync: writeCommitOrder } = useWriteContract();
+  const { signMessageAsync } = useSignMessage();
+  const publicClient = usePublicClient();
 
   const [txState, setTxState] = useState<'idle' | 'awaiting_approval' | 'pending' | 'success' | 'error'>('idle');
   const [txHash, setTxHash] = useState<string>();
   const [txError, setTxError] = useState<string>();
+  const marketPriceUnavailable = orderType === 'Market' && ftsoStatus !== 'live';
 
-  const validateInput = (): { fxrpAmount: bigint, maxPrice: bigint, stopPrice: bigint } | null => {
-    setError('');
-    if (!fxrpAmountStr) return null;
-    if (orderType === 'Limit' && !maxPriceStr) return null;
-    if (orderType === 'Stop' && (!maxPriceStr || !stopPriceStr)) return null;
-
-    if (fxrpAmountStr.includes('e') || maxPriceStr.includes('e') || stopPriceStr.includes('e')) {
-      setError('Scientific notation is not allowed');
-      return null;
-    }
-
+  const validateInput = (budget = budgetStr, maxPriceInput = maxPriceStr, stopPriceInput = stopPriceStr): { budget: bigint, limitPrice: bigint, stopPrice: bigint, orderType: OrderType } | null => {
+    let message = '';
     try {
-      const fxrpAmount = parseEther(fxrpAmountStr);
-      let maxPrice = 0n;
-      if (orderType !== 'Market') {
-        maxPrice = parseEther(maxPriceStr);
-      }
-      const stopPrice = orderType === 'Stop' ? parseEther(stopPriceStr) : 0n;
-
-      if (fxrpAmount <= 0n) {
-        setError('Amount must be greater than zero');
+      if (!budget || (orderType !== 'Market' && !maxPriceInput) || (orderType === 'Stop' && !stopPriceInput)) {
+        setError('');
         return null;
       }
-      if (orderType !== 'Market' && maxPrice <= 0n) {
-        setError('Price must be greater than zero');
-        return null;
-      }
-      if (orderType === 'Stop' && stopPrice <= 0n) {
-        setError('Stop price must be greater than zero');
-        return null;
-      }
-
-      // Calculate estimated quote amount
-      const currentMarketPrice = priceBigInt;
-      const calcPrice = orderType === 'Market' ? currentMarketPrice : maxPrice;
-      const quoteAmount = (fxrpAmount * calcPrice) / 10n ** 18n;
-
-      if (usdt0Balance && usdt0Balance < quoteAmount) {
-        setError(`Insufficient USDT0 vault balance. Need ${formatEther(quoteAmount)}`);
-        return null;
-      }
-
-      return { fxrpAmount, maxPrice, stopPrice };
-    } catch (err) {
-      setError('Invalid amount format');
-      return null;
-    }
-  };
-
-  const estimatedCost = () => {
-    try {
-      if (!fxrpAmountStr) return '0.00';
-      const fAmount = parseEther(fxrpAmountStr);
-      let calcPrice = priceBigInt;
-      if (orderType !== 'Market' && maxPriceStr) {
-        calcPrice = parseEther(maxPriceStr);
-      }
-      const quote = (fAmount * calcPrice) / 10n ** 18n;
-      return formatEther(quote);
+      if (budget.toLowerCase().includes('e') || maxPriceInput.toLowerCase().includes('e') || stopPriceInput.toLowerCase().includes('e')) throw new Error();
+      const parsedBudget = parseEther(budget);
+      const stopPrice = orderType === 'Stop' ? parseEther(stopPriceInput) : 0n;
+      const limitPrice = orderType === 'Market' ? buyMarketCollar(priceBigInt) : parseEther(maxPriceInput);
+      const orderTypeEnum = orderType === 'Market' ? OrderType.market : orderType === 'Stop' ? OrderType.stop : OrderType.limit;
+      if (parsedBudget <= 0n) message = 'Maximum budget must be greater than zero';
+      else if (orderType === 'Market' && ftsoStatus !== 'live') message = 'A live FTSO price is required for a market order';
+      else if (limitPrice <= 0n) message = 'Maximum price must be greater than zero';
+      else if (orderType === 'Stop' && stopPrice <= 0n) message = 'Stop price must be greater than zero';
+      else if (orderType === 'Stop' && limitPrice < stopPrice) message = 'Maximum price must be greater than or equal to stop price';
+      else if (usdt0AvailableBalance !== undefined && usdt0AvailableBalance < parsedBudget) message = `Insufficient USDT0 vault balance. Budget is ${formatTokenAmount(parsedBudget)} USDT0.`;
+      setError(message);
+      return message ? null : { budget: parsedBudget, limitPrice, stopPrice, orderType: orderTypeEnum };
     } catch {
-      return '0.00';
+      setError(orderType === 'Market' && ftsoStatus !== 'live' ? 'A live FTSO price is required for a market order' : 'Enter a valid decimal amount (scientific notation is not allowed)');
+      return null;
     }
   };
+
+  useEffect(() => {
+    setStopPriceStr('');
+    validateInput(budgetStr, maxPriceStr, '');
+  }, [orderType]);
 
   const handleSubmit = async () => {
     if (!address) return;
@@ -113,47 +84,35 @@ export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Li
       setTxHash(undefined);
 
       const expiry = BigInt(Math.floor(Date.now() / 1000) + Number(expiryHours) * 3600);
-      const nonce = BigInt(Math.floor(Math.random() * 1000000));
-      const chainId = 114n; // Coston2
+      if (!isAuditedV2Deployment) throw new Error('Writes are disabled until PrivaraVault V2 is deployed on Coston2');
+      if (!isCorrectNetwork || !publicClient) throw new Error('Connect a wallet on Coston2');
+      const nonce = createNonce();
+      const chainId = BigInt(deployment.chainId);
+      const orderId = createOrderId();
 
-      // Create order object using shared schema types
-      const orderId = stringToHex(`order-${Date.now()}-${Math.floor(Math.random() * 1000)}`, { size: 32 });
+      const amountIn = validated.budget;
 
-      const orderTypeEnum = orderType === 'Market' ? OrderType.market : orderType === 'Stop' ? OrderType.stop : OrderType.limit;
-      const currentMarketPrice = priceBigInt;
-      const calcPrice = orderType === 'Market' ? currentMarketPrice : validated.maxPrice;
-      const amountIn = (validated.fxrpAmount * calcPrice) / 10n ** 18n;
-
-      const order: Order = {
+      const order = OrderSchema.parse({
         orderId,
         maker: address,
         side: OrderSide.buy,
         tokenIn: usdt0Address,
         tokenOut: fxrpAddress,
         amountIn: amountIn, // Quote amount we put in
-        limitPrice: validated.maxPrice,
-        orderType: orderTypeEnum,
+        limitPrice: validated.limitPrice,
+        orderType: validated.orderType,
         stopPrice: validated.stopPrice,
         expiry: Number(expiry),
         nonce,
         chainId: Number(chainId),
         vaultAddress
-      };
+      });
 
-      // In a real TEE integration, we would encrypt `encodedOrder` with the FCC public key.
-      // For local_mock, the ciphertext is just the encoded order itself, or its hash.
-      // Wait! The matcher expects `encryptedCommitment` (from the event) to match its tracked order.
-      // Let's use the hashOrder as the encryptedCommitment for mock purposes.
-      const ciphertext = hashOrder(order); // Mock encryption
-      const encryptedCommitment = keccak256(ciphertext as `0x${string}`); // The commitment sent on-chain
-
-      // We actually need to submit the ciphertext to the backend matcher's POST /submit in a real app,
-      // but in our mock flow, the backend relies on the event. 
-      // The instruction says "Call PrivaraVault.commitOrder() with encryptedCommitment = keccak256(ciphertext)".
-      // But we will just pass `ciphertext` directly since the backend indexer uses the event's `encryptedCommitment` as the ciphertext!
-      // Looking at `indexer.ts`: `encryptedCommitment: orderRecord.encryptedCommitment`.
-      // So if we pass `keccak256(ciphertext)` on-chain, the backend sees `keccak256(ciphertext)` as the ciphertext.
-      // Thus we must pass `ciphertext` as the `encryptedCommitment` argument to the contract so the backend can read it!
+      // Local-mock mode is a commitment prototype, not encryption: the matcher sees this
+      // maker-signed plaintext payload and verifies it against the on-chain order hash.
+      const commitment = hashOrder(order);
+      const payload = JSON.stringify(orderToWire(order));
+      const payloadSignature = await signMessageAsync({ message: payload });
 
       const commitHash = await writeCommitOrder({
         address: vaultAddress,
@@ -164,13 +123,21 @@ export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Li
           0, // OrderSide.buy
           usdt0Address, // tokenIn
           order.amountIn, // amountIn
-          ciphertext as `0x${string}`,
+          commitment as `0x${string}`,
           expiry
-        ]
+        ],
+        chainId: deployment.chainId,
       });
 
       setTxHash(commitHash);
       setTxState('pending');
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: commitHash });
+      if (receipt.status !== 'success') throw new Error('Order commitment reverted');
+      try {
+        await submitOrderPayload(order, address, payloadSignature);
+      } catch (registrationError) {
+        throw new Error(`Order commitment is mined (${commitHash}), but matcher registration failed. Keep this transaction hash and retry the backend or cancel the order. ${orderErrorMessage(registrationError)}`);
+      }
 
       // Save to localStorage for Activity History
       saveOrderToHistory({
@@ -184,37 +151,32 @@ export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Li
         status: 'pending'
       });
 
-      // Simulate success for MVP
       setTxState('success');
-      refetch();
-    } catch (err: any) {
+      setFxrpAmountStr('');
+      setMaxPriceStr('');
+      setStopPriceStr('');
+      setExpiryHours('1');
+      setSliderVal(0);
+      setError('');
+      await refetch();
+    } catch (err: unknown) {
       setTxState('error');
-      setTxError(err.message || 'Failed to submit order');
+      setTxError(orderErrorMessage(err));
     }
   };
 
   const [sliderVal, setSliderVal] = useState(0);
 
   const PCT_STEPS = [25, 50, 75, 100];
-  const balanceDisplay = usdt0Balance ? `${parseFloat(formatEther(usdt0Balance)).toFixed(2)}` : '0.00';
+  const balanceDisplay = formatTokenAmount(usdt0AvailableBalance ?? 0n, 18, 2);
 
   const handlePct = (pct: number) => {
     setSliderVal(pct);
-    if (!usdt0Balance) return;
-    try {
-      const budget = (usdt0Balance * BigInt(pct)) / 100n;
-      const currentMarketPrice = priceBigInt;
-      
-      let price = currentMarketPrice;
-      if (orderType !== 'Market' && maxPriceStr) {
-        price = parseEther(maxPriceStr);
-      }
-
-      if (price > 0n) {
-        const amt = (budget * 10n ** 18n) / price;
-        setFxrpAmountStr(parseFloat(formatEther(amt)).toFixed(4));
-      }
-    } catch { /* ignore */ }
+    if (usdt0AvailableBalance === undefined) return;
+    const budget = (usdt0AvailableBalance * BigInt(pct)) / 100n;
+    const next = formatTokenAmount(budget, 18, 18);
+    setFxrpAmountStr(next);
+    validateInput(next, maxPriceStr);
   };
 
   const inputStyle: React.CSSProperties = {
@@ -249,7 +211,7 @@ export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Li
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--color-bg-base)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '10px var(--space-3)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
             <span style={{ fontSize: '1.1rem' }}>💵</span>
-            <span style={{ fontWeight: 600 }}>USDT</span>
+            <span style={{ fontWeight: 600 }}>USDT0</span>
             <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>▾</span>
           </div>
           <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
@@ -261,18 +223,18 @@ export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Li
 
       {/* Amount input with FXRP label inside */}
       <div>
-        <span style={labelStyle}>Amount to Buy (FXRP)</span>
+        <span style={labelStyle}>Maximum Budget (USDT0)</span>
         <div style={{ position: 'relative' }}>
           <input
             type="text"
             placeholder="0.00"
-            value={fxrpAmountStr}
-            onChange={(e) => { setFxrpAmountStr(e.target.value); validateInput(); }}
+            value={budgetStr}
+            onChange={(e) => { const value = e.target.value; setFxrpAmountStr(value); setSliderVal(0); validateInput(value, maxPriceStr); }}
             style={inputStyle}
             onFocus={e => e.target.style.borderColor = 'var(--color-accent-primary)'}
             onBlur={e => e.target.style.borderColor = 'var(--color-border)'}
           />
-          <span style={{ position: 'absolute', right: 'var(--space-3)', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', fontFamily: 'var(--font-mono)', pointerEvents: 'none' }}>FXRP</span>
+          <span style={{ position: 'absolute', right: 'var(--space-3)', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', fontFamily: 'var(--font-mono)', pointerEvents: 'none' }}>USDT0</span>
         </div>
       </div>
 
@@ -309,7 +271,7 @@ export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Li
             type="text"
             placeholder="0.00"
             value={stopPriceStr}
-            onChange={(e) => { setStopPriceStr(e.target.value); validateInput(); }}
+            onChange={(e) => { const value = e.target.value; setStopPriceStr(value); validateInput(budgetStr, maxPriceStr, value); }}
             style={inputStyle}
             onFocus={e => e.target.style.borderColor = 'var(--color-accent-primary)'}
             onBlur={e => e.target.style.borderColor = 'var(--color-border)'}
@@ -324,7 +286,7 @@ export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Li
             type="text"
             placeholder="0.00"
             value={maxPriceStr}
-            onChange={(e) => { setMaxPriceStr(e.target.value); validateInput(); }}
+            onChange={(e) => { const value = e.target.value; setMaxPriceStr(value); validateInput(budgetStr, value); }}
             style={inputStyle}
             onFocus={e => e.target.style.borderColor = 'var(--color-accent-primary)'}
             onBlur={e => e.target.style.borderColor = 'var(--color-border)'}
@@ -346,15 +308,13 @@ export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Li
         </select>
       </div>
 
-      {/* Estimated Cost */}
       <div style={{ background: 'var(--color-bg-base)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-          <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>Estimated Cost</span>
-          <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{estimatedCost()} USDT</span>
+        <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginBottom: '8px' }}>
+          V2 uses this entire USDT0 amount as a maximum budget for one compatible exact-fill sell order at or below your maximum price. The received FXRP quantity depends on that matched sell; no exact quantity is promised.
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Network Fee (Coston2)</span>
-          <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>~ 0.0001 USDT</span>
+          <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>Paid by wallet in Coston2 native gas token</span>
         </div>
       </div>
 
@@ -367,10 +327,10 @@ export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Li
             addToast("Harap hubungkan wallet", "error", "top-right");
             return;
           }
-          const isDisabled = !fxrpAmountStr || (orderType !== 'Market' && !maxPriceStr) || (orderType === 'Stop' && !stopPriceStr) || !!error || !isCorrectNetwork || txState === 'awaiting_approval' || txState === 'pending';
+          const isDisabled = !budgetStr || (orderType !== 'Market' && !maxPriceStr) || (orderType === 'Stop' && !stopPriceStr) || marketPriceUnavailable || !!error || !isCorrectNetwork || txState === 'awaiting_approval' || txState === 'pending';
           if (isDisabled) {
             if (!isCorrectNetwork) addToast("Please switch to Coston2 Network", "error", "top-right");
-            else if (!fxrpAmountStr || (orderType !== 'Market' && !maxPriceStr)) addToast("Please enter amount and price", "error", "top-right");
+            else if (!budgetStr || (orderType !== 'Market' && !maxPriceStr)) addToast("Please enter amount and price", "error", "top-right");
             else if (orderType === 'Stop' && !stopPriceStr) addToast("Please enter stop price", "error", "top-right");
             else if (error) addToast(error, "error", "top-right");
             else addToast("Transaction in progress", "info", "top-right");
@@ -378,7 +338,8 @@ export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Li
           }
           setShowConfirmModal(true);
         }}
-        aria-disabled={(!fxrpAmountStr || (orderType !== 'Market' && !maxPriceStr) || (orderType === 'Stop' && !stopPriceStr) || !!error || !isCorrectNetwork || txState === 'awaiting_approval' || txState === 'pending') ? "true" : "false"}
+        disabled={!isAuditedV2Deployment || txState === 'awaiting_approval' || txState === 'pending'}
+        aria-disabled={(!isAuditedV2Deployment || !budgetStr || (orderType !== 'Market' && !maxPriceStr) || (orderType === 'Stop' && !stopPriceStr) || marketPriceUnavailable || !!error || !isCorrectNetwork || txState === 'awaiting_approval' || txState === 'pending') ? "true" : "false"}
         className="btn-premium-buy"
         style={{
           width: '100%',
@@ -394,32 +355,44 @@ export const BuyOrderForm: React.FC<{ orderType?: string }> = ({ orderType = 'Li
       <TransactionState state={txState} txHash={txHash} errorMessage={txError} />
 
       {/* CONFIRMATION MODAL */}
-      <Modal isOpen={showConfirmModal} onClose={() => setShowConfirmModal(false)} title="🔒 Confirm Order Details">
+      <Modal isOpen={showConfirmModal} onClose={() => setShowConfirmModal(false)} title={`Confirm ${orderType} Buy Order`}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', color: 'var(--color-text-primary)' }}>
           <div style={{ padding: '14px', background: 'rgba(0, 231, 223, 0.08)', border: '1px solid rgba(0, 231, 223, 0.25)', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span style={{ fontSize: '24px' }}>🛡️</span>
             <div>
               <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--color-accent-primary)' }}>Review Your Order</div>
-              <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>Please confirm your encrypted order details.</div>
+              <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>Review the signed plaintext local_mock payload and on-chain hash commitment.</div>
             </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
               <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>
-              <div><strong>Action:</strong> Buy {fxrpAmountStr || 0} FXRP</div>
+              <div><strong>Maximum budget:</strong> {budgetStr || 0} USDT0 for one compatible exact-fill sell</div>
             </div>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
               <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>
-              <div><strong>{orderType === 'Market' ? 'Est. Price' : 'Max Price'}:</strong> {orderType === 'Market' ? priceFormatted : (maxPriceStr || 0)} USDT0 per FXRP</div>
+              <div><strong>{orderType === 'Market' ? 'Fixed 1% FTSO collar' : 'Max Price'}:</strong> {orderType === 'Market' ? formatTokenAmount(buyMarketCollar(priceBigInt), 18, 6) : (maxPriceStr || 0)} USDT0 per FXRP</div>
+            </div>
+            {orderType === 'Market' && (
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>
+                <div><strong>FTSO reference:</strong> {priceFormatted} USDT0 per FXRP; the collar is fixed when submitted and does not reprice automatically</div>
+              </div>
+            )}
+            {orderType === 'Stop' && (
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>
+                <div><strong>Stop trigger:</strong> activates while FTSO is at or above {stopPriceStr || 0} USDT0 per FXRP; the trigger is level-based and not permanently latched</div>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+              <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>
+              <div><strong>Fill semantics:</strong> one compatible sell only; FXRP received is determined by that exact fill</div>
             </div>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
               <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>
-              <div><strong>{orderType === 'Market' ? 'Est. Total Cost' : 'Total Cost'}:</strong> ~{estimatedCost()} USDT0</div>
-            </div>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-              <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>
-              <div><strong>Privacy:</strong> Fully Encrypted & Confidential</div>
+              <div><strong>Privacy:</strong> Commitment prototype — local matcher sees signed order payload</div>
             </div>
           </div>
 

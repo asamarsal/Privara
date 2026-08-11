@@ -116,7 +116,7 @@ export default function HowItWorksPage() {
         <div style={{ maxWidth: '800px' }}>
           <h1 className="hiw-header-stagger" style={{ fontSize: isMobile ? '2rem' : '3rem', fontWeight: 800, margin: '0 0 16px 0', color: 'var(--color-text-primary)' }}>
             {typedTitle.substring(0, 4)}
-            <span style={{ color: 'var(--color-accent-primary)' }}>{typedTitle.length > 4 ? typedTitle.substring(4, 11) : ''}</span>
+            <span style={{ color: '#3B82F6' }}>{typedTitle.length > 4 ? typedTitle.substring(4, 11) : ''}</span>
             {typedTitle.length > 11 ? typedTitle.substring(11) : ''}
           </h1>
           <p className="hiw-header-stagger" style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: '1.1rem', lineHeight: 1.6 }}>
@@ -136,7 +136,7 @@ export default function HowItWorksPage() {
             fontSize: '13px', fontWeight: 600,
             backdropFilter: 'blur(8px)',
           }}>
-            <span>🔒</span> Confidential on Flare
+            <img src="/icon/lockicon.png" alt="Lock" style={{ width: '14px', height: '14px', objectFit: 'contain' }} /> Confidential on Flare
           </div>
 
           <div className="hiw-header-stagger" style={{
@@ -152,7 +152,7 @@ export default function HowItWorksPage() {
             <div style={{ fontSize: '24px' }}>🛡️</div>
             <div>
               <div style={{ fontWeight: 600, color: 'var(--color-text-primary)', fontSize: '14px', marginBottom: '4px' }}>Powered by Flare Confidential Compute</div>
-              <div style={{ color: 'var(--color-text-secondary)', fontSize: '12px' }}>Built on FTSOv2, Coston2, and secure MPC infrastructure.</div>
+              <div style={{ color: 'var(--color-text-secondary)', fontSize: '12px' }}>Built on FTSOv2 and Coston2, with local-mock matching disclosed for this hackathon MVP.</div>
             </div>
           </div>
         </div>
@@ -167,23 +167,23 @@ export default function HowItWorksPage() {
         {[
           {
             step: 1, title: 'Deposit', icon: '📥',
-            desc: 'Deposit FXRP or USDT0 into your non-custodial Privara wallet.',
-            privacyType: 'private', privacyTitle: 'Stays private',
-            privacyDesc: 'Wallet balance, deposit amount, addresses',
+            desc: 'Deposit test-only FXRP or USDT0 into PrivaraVault V2 on Coston2.',
+            privacyType: 'public', privacyTitle: 'Visible on-chain',
+            privacyDesc: 'Wallet address, asset, deposit amount, and timing',
             accentColor: '#a855f7', accentAlpha: 'rgba(168,85,247,',
           },
           {
-            step: 2, title: 'Create Private Order', icon: '📝',
-            desc: 'Create your order with price and quantity limits. Terms are encrypted before leaving your device.',
-            privacyType: 'private', privacyTitle: 'Stays private',
-            privacyDesc: 'Price, size, order type, side, expiry, and other terms',
+            step: 2, title: 'Create Order Commitment', icon: '📝',
+            desc: 'Sign a canonical plaintext payload and commit its hash on-chain. Hashing is not encryption.',
+            privacyType: 'public', privacyTitle: 'Metadata is public',
+            privacyDesc: 'Maker, side, token, amount, commitment hash, expiry, and timing',
             accentColor: '#a855f7', accentAlpha: 'rgba(168,85,247,',
           },
           {
-            step: 3, title: 'Confidential Matching', icon: '🔒',
-            desc: 'Orders are privately compared inside Privara Match Engine (MPC). Only a match result is returned.',
-            privacyType: 'private', privacyTitle: 'Stays private',
-            privacyDesc: 'All order terms and identities (only match result revealed)',
+            step: 3, title: 'Local-Mock Matching', icon: '/icon/lockicon.png',
+            desc: 'The disclosed local matcher verifies and compares maker-signed plaintext payloads; production FCC privacy remains roadmap work.',
+            privacyType: 'private', privacyTitle: 'Not posted as plaintext on-chain',
+            privacyDesc: 'Limit and stop bounds are delivered to the local matcher, not published in the OrderCommitted event',
             accentColor: '#00bfb8', accentAlpha: 'rgba(0,191,184,',
           },
           {
@@ -232,7 +232,9 @@ export default function HowItWorksPage() {
                 </div>
 
                 {/* Icon */}
-                <div style={{ fontSize: '40px', marginBottom: '20px' }}>{item.icon}</div>
+                <div style={{ fontSize: '40px', marginBottom: '20px' }}>
+                  {item.icon.startsWith('/') ? <img src={item.icon} alt="Icon" style={{ width: '36px', height: '36px', objectFit: 'contain' }} /> : item.icon}
+                </div>
 
                 <div style={{ color: 'var(--color-text-secondary)', fontSize: '12px', lineHeight: 1.7 }}>{item.desc}</div>
               </div>
@@ -246,7 +248,7 @@ export default function HowItWorksPage() {
                 borderTop: `1px solid ${item.privacyType === 'private' ? 'rgba(168,85,247,0.15)' : 'rgba(0,191,184,0.15)'}`,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: item.privacyType === 'private' ? '#a855f7' : 'var(--color-accent-primary)', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>
-                  <span>{item.privacyType === 'private' ? '🔒' : '👁️'}</span>
+                  <span>{item.privacyType === 'private' ? <img src="/icon/lockicon.png" alt="Lock" style={{ width: '12px', height: '12px', objectFit: 'contain' }} /> : '👁️'}</span>
                   {item.privacyTitle}
                 </div>
                 <div style={{ color: 'var(--color-text-muted)', fontSize: '11px', lineHeight: 1.5 }}>{item.privacyDesc}</div>
@@ -287,7 +289,7 @@ export default function HowItWorksPage() {
                 background: 'rgba(168,85,247,0.1)',
                 border: '1px solid rgba(168,85,247,0.25)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px',
-              }}>🔒</div>
+              }}><img src="/icon/lockicon.png" alt="Lock" style={{ width: '18px', height: '18px', objectFit: 'contain' }} /></div>
               <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--color-text-primary)', fontWeight: 700 }}>What stays private</h3>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -378,7 +380,7 @@ export default function HowItWorksPage() {
             {[
               { title: 'Browser', icon: '🌐', sub: 'User creates order in the browser.' },
               { title: 'Privara Vault', icon: '🏦', sub: 'Encrypts and stores orders securely.' },
-              { title: 'Matcher', icon: '⚙️', sub: 'Privately matches orders (MPC).' },
+              { title: 'Matcher', icon: '⚙️', sub: 'Matches signed payloads in disclosed local-mock mode.' },
               { title: 'FCC', icon: '🛡️', sub: 'Executes confidential compute workloads.' },
               { title: 'FTSOv2', icon: '📈', sub: 'Provides secure price reference.' }
             ].map((node, idx) => (
@@ -446,12 +448,12 @@ export default function HowItWorksPage() {
         {[
           {
             q: 'Is this mainnet?',
-            a: 'Privara is live on Flare mainnet. All settlement is executed on-chain using Coston2 for secure and efficient finality.',
+            a: 'Privara is a Coston2 testnet hackathon MVP. It is not deployed on Flare Mainnet and must not be used with real funds.',
             icon: '🌐',
           },
           {
             q: 'Are unmatched order terms public?',
-            a: 'No. Unmatched orders and all their terms remain fully encrypted and private. Only a match result is ever returned to the users.',
+            a: 'No. The current MVP is not fully private: maker, side, token, amount, expiry, commitment, and transaction metadata are public, while the local matcher receives the signed order payload.',
             icon: '🔒',
           },
           {

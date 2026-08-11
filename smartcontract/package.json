@@ -5,7 +5,12 @@
         "compile": "hardhat compile",
         "test": "hardhat test",
         "lint": "echo 'No lint'",
-        "typecheck": "tsc --noEmit"
+        "typecheck": "tsc --noEmit",
+        "deploy:v2:assets": "hardhat run scripts/deploy/deployV2MockAssets.ts --network coston2",
+        "deploy:v2:verifier": "hardhat run scripts/deploy/deployLocalEip191Verifier.ts --network coston2",
+        "deploy:v2:vault": "hardhat run scripts/deploy/deployVault.ts --network coston2",
+        "verify:v2": "hardhat run scripts/deploy/verifyV2Deployment.ts --network coston2",
+        "mint:demo": "hardhat run scripts/mintToUser.ts --network coston2"
     },
     "devDependencies": {
         "@nomicfoundation/hardhat-chai-matchers": "^2.1.2",

@@ -4,12 +4,15 @@ import { useVaultBalance } from '../../hooks/useVaultBalance';
 import { Modal } from '../Modal';
 import { DepositForm } from '../DepositForm';
 import { WithdrawalForm } from '../WithdrawalForm';
+import { useFtsoPrice } from '../../hooks/useFtsoPrice';
 
 export const VaultHoldings: React.FC = () => {
   const router = useRouter();
   const [modalType, setModalType] = useState<'deposit' | 'withdraw' | 'info' | null>(null);
   const { formattedFxrp, formattedUsdt0, isLoading } = useVaultBalance();
-  const fxrpUsdValue = Number(formattedFxrp || 0) * 0.25;
+  const { priceFormatted, status: priceStatus } = useFtsoPrice();
+  const liveFxrpPrice = priceStatus === 'live' ? Number(priceFormatted) : 0;
+  const fxrpUsdValue = Number(formattedFxrp || 0) * liveFxrpPrice;
   const usdt0UsdValue = Number(formattedUsdt0 || 0) * 1.00;
   const totalUsd = fxrpUsdValue + usdt0UsdValue;
   const totalValue = totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -141,10 +144,10 @@ export const VaultHoldings: React.FC = () => {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#00e7df' }}>
-                  Non-Custodial & Encrypted Vault
+                  On-Chain V2 Vault & Commitment Flow
                 </h4>
                 <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
-                  Your assets are held securely in smart contracts on Flare Coston2 with private balance tracking.
+                  Test-only assets and balances are public on Coston2. The V2 vault enforces custody accounting, reservation, cancellation, and settlement checks.
                 </p>
               </div>
             </div>
@@ -164,9 +167,9 @@ export const VaultHoldings: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', fontSize: '13px', lineHeight: 1.5 }}>
                 <span style={{ color: '#00e7df', fontWeight: 700, fontSize: '15px', flexShrink: 0 }}>✓</span>
                 <div>
-                  <strong style={{ color: 'var(--color-text-primary)' }}>Encrypted Commitment Vault: </strong>
+                  <strong style={{ color: 'var(--color-text-primary)' }}>Hash Commitment Prototype: </strong>
                   <span style={{ color: 'var(--color-text-secondary)' }}>
-                    Active order funds are cryptographically locked, preventing MEV bots from front-running.
+                    V2 reserves active-order funds and stores a commitment hash. Hashing is not encryption; the disclosed local_mock matcher receives the maker-signed plaintext order payload.
                   </span>
                 </div>
               </div>
@@ -176,7 +179,7 @@ export const VaultHoldings: React.FC = () => {
                 <div>
                   <strong style={{ color: 'var(--color-text-primary)' }}>Automated Deposit & Withdrawal: </strong>
                   <span style={{ color: 'var(--color-text-secondary)' }}>
-                    Instant, on-chain deposits and withdrawals processed on Coston2 Testnet.
+                    Wallet-authorized, on-chain deposits and withdrawals are processed on Coston2 Testnet after successful transaction receipts.
                   </span>
                 </div>
               </div>

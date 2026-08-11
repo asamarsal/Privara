@@ -7,7 +7,7 @@
     "build": "tsc",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "echo 'No tests yet'",
+    "test": "vitest run",
     "start": "node dist/index.js"
   },
   "dependencies": {

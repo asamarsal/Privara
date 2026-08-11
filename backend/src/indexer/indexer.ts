@@ -1,215 +1,130 @@
 import { ethers } from "ethers";
 import { logger } from "../logger";
 import { getConfig } from "../config";
-// Assuming PrivaraVault ABI is available in shared or we can import it.
-// For now, we will use a minimal ABI for the events and getOrder.
+
 const PrivaraVaultABI = [
-  "event OrderCommitted(bytes32 indexed orderId, address indexed maker, uint8 side, address tokenIn, uint256 amountIn, uint64 expiry)",
+  "event OrderCommitted(bytes32 indexed orderId, address indexed maker, uint8 side, address tokenIn, uint256 amountIn, bytes32 encryptedCommitment, uint64 expiry)",
   "event OrderCancelled(bytes32 indexed orderId, address indexed maker)",
   "event OrderSettled(bytes32 indexed matchId, bytes32 indexed buyOrderId, bytes32 indexed sellOrderId, uint256 executionPrice, uint256 fxrpAmount, uint256 quoteAmount)",
-  "function commitOrder(bytes32 orderId, uint8 side, address tokenIn, uint256 amountIn, bytes32 encryptedCommitment, uint64 expiry)"
 ];
 
+export type OrderStatus = "active" | "cancelled" | "settled" | "expired";
 export interface OpenOrder {
-  orderId: string;
-  maker: string;
-  side: number; // 0 for Buy, 1 for Sell
-  tokenIn: string;
-  amountIn: bigint;
-  encryptedCommitment: string;
-  expiry: number;
-  blockNumber: number;
-  logIndex: number;
+  orderId: string; maker: string; side: number; tokenIn: string; amountIn: bigint;
+  encryptedCommitment: string; expiry: number; blockNumber: number; logIndex: number;
+  txHash?: string; status?: OrderStatus;
 }
-
+export interface SettlementRecord {
+  matchId: string; buyOrderId: string; sellOrderId: string; buyer: string; seller: string;
+  executionPrice: bigint; fxrpAmount: bigint; quoteAmount: bigint;
+  blockNumber: number; logIndex: number; txHash: string; timestamp: number;
+}
 export type OrderBook = Map<string, OpenOrder>;
 
 export class Indexer {
-  private orderBook: OrderBook = new Map();
-  private provider: ethers.Provider;
-  private contract: ethers.Contract;
-  private fromBlock: number;
-  private lastPolledBlock: number = 0;
+  private readonly orders = new Map<string, OpenOrder>();
+  private readonly settlements = new Map<string, SettlementRecord>();
+  private readonly blockTimestamps = new Map<number, number>();
+  private readonly provider: ethers.Provider;
+  private readonly contract: ethers.Contract;
+  private readonly fromBlock: number;
+  private readonly pollIntervalMs: number;
+  private lastPolledBlock = 0;
+  private polling = false;
+  private timer?: ReturnType<typeof setTimeout>;
 
-  constructor(provider: ethers.Provider, vaultAddress: string, fromBlock: number) {
+  constructor(provider: ethers.Provider, vaultAddress: string, fromBlock: number, pollIntervalMs = getConfig().POLL_INTERVAL_MS) {
     this.provider = provider;
-    this.contract = new ethers.Contract(vaultAddress, PrivaraVaultABI, this.provider);
+    this.contract = new ethers.Contract(vaultAddress, PrivaraVaultABI, provider);
     this.fromBlock = fromBlock;
+    this.pollIntervalMs = pollIntervalMs;
   }
 
+  /** Matcher-compatible active view. Expiry is evaluated at read time. */
   public getOrderBook(): OrderBook {
-    return this.orderBook;
+    const now = Math.floor(Date.now() / 1000);
+    for (const order of this.orders.values()) {
+      if (order.status === "active" && order.expiry <= now) order.status = "expired";
+    }
+    return new Map([...this.orders].filter(([, order]) => order.status === "active"));
+  }
+  public getOrders(): ReadonlyMap<string, OpenOrder> { return this.orders; }
+  public getSettlements(): readonly SettlementRecord[] { return [...this.settlements.values()]; }
+  public getFreshness() { return { lastIndexedBlock: this.lastPolledBlock, polling: this.polling }; }
+
+  private async timestamp(blockNumber: number): Promise<number> {
+    const cached = this.blockTimestamps.get(blockNumber);
+    if (cached !== undefined) return cached;
+    const block = await this.provider.getBlock(blockNumber);
+    if (!block) throw new Error(`Block ${blockNumber} not found`);
+    const value = Number(block.timestamp);
+    this.blockTimestamps.set(blockNumber, value);
+    return value;
+  }
+
+  private async applyEvent(event: ethers.EventLog): Promise<void> {
+    if (event.eventName === "OrderCommitted") {
+      const [orderId, maker, side, tokenIn, amountIn, encryptedCommitment, expiry] = event.args;
+      this.orders.set(orderId, { orderId, maker, side: Number(side), tokenIn, amountIn: BigInt(amountIn), encryptedCommitment,
+        expiry: Number(expiry), blockNumber: event.blockNumber, logIndex: event.index,
+        txHash: event.transactionHash, status: Number(expiry) > Math.floor(Date.now() / 1000) ? "active" : "expired" });
+    } else if (event.eventName === "OrderCancelled") {
+      const order = this.orders.get(event.args[0]);
+      if (order && order.status !== "settled") order.status = "cancelled";
+    } else if (event.eventName === "OrderSettled") {
+      const [matchId, buyOrderId, sellOrderId, executionPrice, fxrpAmount, quoteAmount] = event.args;
+      const buy = this.orders.get(buyOrderId), sell = this.orders.get(sellOrderId);
+      if (!buy || !sell) {
+        logger.warn("Settlement references unknown order", { matchId, buyOrderId, sellOrderId });
+        return;
+      }
+      buy.status = "settled"; sell.status = "settled";
+      this.settlements.set(matchId, { matchId, buyOrderId, sellOrderId, buyer: buy.maker, seller: sell.maker,
+        executionPrice: BigInt(executionPrice), fxrpAmount: BigInt(fxrpAmount), quoteAmount: BigInt(quoteAmount),
+        blockNumber: event.blockNumber, logIndex: event.index, txHash: event.transactionHash,
+        timestamp: await this.timestamp(event.blockNumber) });
+    }
+  }
+
+  private async events(from: number, to: number): Promise<ethers.EventLog[]> {
+    const [committed, cancelled, settled] = await Promise.all([
+      this.contract.queryFilter(this.contract.filters.OrderCommitted(), from, to),
+      this.contract.queryFilter(this.contract.filters.OrderCancelled(), from, to),
+      this.contract.queryFilter(this.contract.filters.OrderSettled(), from, to),
+    ]);
+    return [...committed, ...cancelled, ...settled]
+      .filter((event): event is ethers.EventLog => event instanceof ethers.EventLog)
+      .sort((a, b) => a.blockNumber - b.blockNumber || a.index - b.index);
+  }
+
+  private async syncRange(from: number, to: number): Promise<void> {
+    for (let start = from; start <= to; start += 30) {
+      const end = Math.min(start + 29, to);
+      for (const event of await this.events(start, end)) await this.applyEvent(event);
+      this.lastPolledBlock = end; // incremental: a later failure resumes at the first unprocessed chunk
+    }
   }
 
   public async replayEvents(): Promise<void> {
-    logger.info("Replaying events", { fromBlock: this.fromBlock });
-    
-    const filterCommitted = this.contract.filters.OrderCommitted();
-    const filterCancelled = this.contract.filters.OrderCancelled();
-    const filterSettled = this.contract.filters.OrderSettled();
-
-    const latestBlock = await this.provider.getBlockNumber();
-    this.lastPolledBlock = latestBlock;
-    const CHUNK_SIZE = 30; // Coston2 limit is 30 blocks
-    let allEvents: ethers.EventLog[] = [];
-    
-    // Process chunks concurrently to speed up but limit concurrency to avoid rate limits
-    const CONCURRENCY_LIMIT = 5;
-    let currentBlock = this.fromBlock;
-    let processedBlocks = 0;
-    const totalBlocks = latestBlock - this.fromBlock;
-
-    while (currentBlock <= latestBlock) {
-      const promises = [];
-      for (let i = 0; i < CONCURRENCY_LIMIT && currentBlock <= latestBlock; i++) {
-        let from = currentBlock;
-        let to = from + CHUNK_SIZE - 1;
-        if (to > latestBlock) to = latestBlock;
-        
-        promises.push(
-          Promise.all([
-            this.contract.queryFilter(filterCommitted, from, to),
-            this.contract.queryFilter(filterCancelled, from, to),
-            this.contract.queryFilter(filterSettled, from, to)
-          ]).then(([committed, cancelled, settled]) => {
-            return [...(committed as ethers.EventLog[]), ...(cancelled as ethers.EventLog[]), ...(settled as ethers.EventLog[])];
-          })
-        );
-        currentBlock += CHUNK_SIZE;
-      }
-
-      const results = await Promise.all(promises);
-      for (const batchEvents of results) {
-        allEvents.push(...batchEvents);
-      }
-      
-      processedBlocks += CHUNK_SIZE * promises.length;
-      if (processedBlocks % (CHUNK_SIZE * CONCURRENCY_LIMIT * 10) === 0 || currentBlock > latestBlock) {
-        const progress = Math.min(100, Math.round((processedBlocks / totalBlocks) * 100));
-        logger.info(`Syncing events... ${progress}% (${currentBlock}/${latestBlock})`);
-      }
-    }
-
-    // Sort by blockNumber, then logIndex
-    allEvents.sort((a, b) => {
-      if (a.blockNumber === b.blockNumber) {
-        return a.index - b.index;
-      }
-      return a.blockNumber - b.blockNumber;
-    });
-
-    for (const event of allEvents) {
-      if ('eventName' in event && event.eventName === 'OrderCommitted' && 'args' in event) {
-        const [orderId, maker, side, tokenIn, amountIn, expiry] = (event as ethers.EventLog).args;
-        
-        // Since _orders is internal in the contract, we can't query it.
-        // Instead, we parse the transaction that emitted the event to get the encryptedCommitment.
-        let encryptedCommitment = "0x0000000000000000000000000000000000000000000000000000000000000000";
-        try {
-          const tx = await this.provider.getTransaction((event as ethers.EventLog).transactionHash);
-          if (tx && tx.data) {
-            const parsed = this.contract.interface.parseTransaction({ data: tx.data });
-            if (parsed && parsed.name === "commitOrder") {
-              encryptedCommitment = parsed.args[4]; // 5th argument is encryptedCommitment
-            }
-          }
-        } catch (err) {
-          logger.warn("Failed to fetch tx for OrderCommitted", { txHash: (event as ethers.EventLog).transactionHash });
-        }
-        
-        this.orderBook.set(orderId, {
-          orderId,
-          maker,
-          side: Number(side),
-          tokenIn,
-          amountIn: BigInt(amountIn),
-          encryptedCommitment,
-          expiry: Number(expiry),
-          blockNumber: event.blockNumber,
-          logIndex: event.index,
-        });
-      } else if ('eventName' in event && event.eventName === 'OrderCancelled' && 'args' in event) {
-        const [orderId] = (event as ethers.EventLog).args;
-        this.orderBook.delete(orderId);
-      } else if ('eventName' in event && event.eventName === 'OrderSettled' && 'args' in event) {
-        const [matchId, buyOrderId, sellOrderId] = (event as ethers.EventLog).args;
-        this.orderBook.delete(buyOrderId);
-        this.orderBook.delete(sellOrderId);
-      }
-    }
-    
-    logger.info("Replay complete", { orderBookSize: this.orderBook.size });
+    this.orders.clear(); this.settlements.clear(); this.blockTimestamps.clear();
+    const latest = await this.provider.getBlockNumber();
+    this.lastPolledBlock = this.fromBlock - 1;
+    if (this.fromBlock <= latest) await this.syncRange(this.fromBlock, latest);
+    logger.info("Replay complete", { activeOrders: this.getOrderBook().size, retainedOrders: this.orders.size, settlements: this.settlements.size });
   }
 
-  public subscribeToNewEvents(): void {
-    logger.info("Subscribing to new events via manual polling");
-    
-    setInterval(async () => {
-      try {
-        const latestBlock = await this.provider.getBlockNumber();
-        if (latestBlock <= this.lastPolledBlock) return;
-
-        const from = this.lastPolledBlock + 1;
-        const to = latestBlock;
-
-        const filterCommitted = this.contract.filters.OrderCommitted();
-        const filterCancelled = this.contract.filters.OrderCancelled();
-        const filterSettled = this.contract.filters.OrderSettled();
-
-        const [committed, cancelled, settled] = await Promise.all([
-          this.contract.queryFilter(filterCommitted, from, to),
-          this.contract.queryFilter(filterCancelled, from, to),
-          this.contract.queryFilter(filterSettled, from, to)
-        ]);
-
-        const allEvents = [...(committed as ethers.EventLog[]), ...(cancelled as ethers.EventLog[]), ...(settled as ethers.EventLog[])];
-
-        allEvents.sort((a, b) => {
-          if (a.blockNumber === b.blockNumber) {
-            return a.index - b.index;
-          }
-          return a.blockNumber - b.blockNumber;
-        });
-
-        for (const event of allEvents) {
-          if ('eventName' in event && event.eventName === 'OrderCommitted' && 'args' in event) {
-            const [orderId, maker, side, tokenIn, amountIn, expiry] = event.args;
-            logger.info("New OrderCommitted", { orderId });
-            
-            let encryptedCommitment = "0x0000000000000000000000000000000000000000000000000000000000000000";
-            try {
-              const tx = await this.provider.getTransaction(event.transactionHash);
-              if (tx && tx.data) {
-                const parsed = this.contract.interface.parseTransaction({ data: tx.data });
-                if (parsed && parsed.name === "commitOrder") {
-                  encryptedCommitment = parsed.args[4];
-                }
-              }
-            } catch (err) {
-              logger.error("Failed to fetch tx for new event", { orderId, error: (err as Error).message });
-            }
-
-            this.orderBook.set(orderId, {
-              orderId, maker, side: Number(side), tokenIn, amountIn: BigInt(amountIn),
-              encryptedCommitment, expiry: Number(expiry),
-              blockNumber: event.blockNumber, logIndex: event.index,
-            });
-          } else if ('eventName' in event && event.eventName === 'OrderCancelled' && 'args' in event) {
-            const [orderId] = event.args;
-            logger.info("OrderCancelled", { orderId });
-            this.orderBook.delete(orderId);
-          } else if ('eventName' in event && event.eventName === 'OrderSettled' && 'args' in event) {
-            const [matchId, buyOrderId, sellOrderId] = event.args;
-            logger.info("OrderSettled", { matchId, buyOrderId, sellOrderId });
-            this.orderBook.delete(buyOrderId);
-            this.orderBook.delete(sellOrderId);
-          }
-        }
-        
-        this.lastPolledBlock = latestBlock;
-      } catch (err) {
-        logger.error("Error during manual event polling", { error: (err as Error).message });
-      }
-    }, 5000);
+  private schedule(): void {
+    if (!this.timer) this.timer = setTimeout(() => { this.timer = undefined; void this.poll(); }, this.pollIntervalMs);
   }
+  private async poll(): Promise<void> {
+    if (this.polling) return;
+    this.polling = true;
+    try {
+      const latest = await this.provider.getBlockNumber();
+      if (latest > this.lastPolledBlock) await this.syncRange(this.lastPolledBlock + 1, latest);
+    } catch (error) { logger.error("Error during event polling", { error: (error as Error).message }); }
+    finally { this.polling = false; this.schedule(); }
+  }
+  public subscribeToNewEvents(): void { this.schedule(); }
+  public stop(): void { if (this.timer) clearTimeout(this.timer); this.timer = undefined; }
 }

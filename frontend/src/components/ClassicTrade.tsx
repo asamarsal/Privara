@@ -2,24 +2,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import gsap from 'gsap';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { useAccount, useWriteContract } from 'wagmi';
-import { parseEther, formatEther, parseAbi, stringToHex } from 'viem';
-import { hashOrder, Order, OrderSide, OrderType } from '@privara/shared';
-import { useVaultBalance } from '../hooks/useVaultBalance';
-import { saveOrderToHistory } from '../hooks/useActivity';
+import { useAccount } from 'wagmi';
+import { formatEther } from 'viem';
 import { TransactionState } from './TransactionState';
+import { useClassicOrderSubmission } from '../hooks/useClassicOrderSubmission';
+import { useFtsoPrice } from '../hooks/useFtsoPrice';
 import { useToast } from './ToastContext';
 import { useWindowSize } from '../hooks/useWindowSize';
 import { Modal } from './Modal';
 
-const vaultAbi = parseAbi([
-  'function commitOrder(bytes32 orderId, uint8 side, address tokenIn, uint256 amountIn, bytes32 encryptedCommitment, uint64 expiry)'
-]);
-
 export function ClassicTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
   const router = useRouter();
-  const { address, isConnected } = useAccount();
-  const { writeContractAsync: writeCommitOrder } = useWriteContract();
+  const { isConnected } = useAccount();
   const [mode, setMode] = useState<'buy' | 'sell'>('buy');
   const [hideBalances, setHideBalances] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
@@ -66,12 +60,12 @@ export function ClassicTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
       return () => clearInterval(timer);
     }
   }, [showHowItWorks]);
-  const vaultAddress = "0xa479Bc0C4B000D0dcD6FaC3BB9E71B830eBE048E";
-  const fxrpAddress = "0x12967a98792fc53Fb39E91d9B69917B5D32fb011";
-  const usdt0Address = "0xDC7E830282489f5e461C4bfC0deE292fD9591C86";
-
-  // Balances
-  const { usdt0Balance, fxrpBalance, formattedUsdt0, formattedFxrp, refetch } = useVaultBalance();
+  const { priceFormatted } = useFtsoPrice();
+  const { usdt0AvailableBalance, fxrpAvailableBalance, formattedUsdt0Available, formattedFxrpAvailable, submit, txState, txHash, txError } = useClassicOrderSubmission();
+  const usdt0Balance = usdt0AvailableBalance;
+  const fxrpBalance = fxrpAvailableBalance;
+  const formattedUsdt0 = formattedUsdt0Available;
+  const formattedFxrp = formattedFxrpAvailable;
 
   const fxrpBalanceDisplay = hideBalances ? '••••••' : formattedFxrp;
   const usdtBalanceDisplay = hideBalances ? '••••••' : formattedUsdt0;
@@ -82,24 +76,15 @@ export function ClassicTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
   const [amountStr, setAmountStr] = useState('');
   const [priceStr, setPriceStr] = useState('');
   const [expiryHours, setExpiryHours] = useState('24');
-  const [txState, setTxState] = useState<'idle' | 'awaiting_approval' | 'pending' | 'success' | 'error'>('idle');
-  const [txHash, setTxHash] = useState<string>();
-  const [txError, setTxError] = useState('');
-
   const pctSteps = [25, 50, 75, 100];
   const [sliderVal, setSliderVal] = useState(0);
 
   const handlePct = (pct: number) => {
     setSliderVal(pct);
     if (mode === 'buy') {
-      if (usdt0Balance === undefined || !priceStr) return;
-      try {
-        const budget = (usdt0Balance * BigInt(pct)) / 100n;
-        const price = parseEther(priceStr);
-        if (price === 0n) return;
-        const amount = (budget * parseEther('1')) / price;
-        setAmountStr(formatEther(amount));
-      } catch { }
+      if (usdt0Balance === undefined) return;
+      const budget = (usdt0Balance * BigInt(pct)) / 100n;
+      setAmountStr(formatEther(budget));
     } else {
       if (fxrpBalance === undefined) return;
       const budget = (fxrpBalance * BigInt(pct)) / 100n;
@@ -108,109 +93,11 @@ export function ClassicTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
   };
 
   const handleSubmit = async () => {
-    if (!isConnected) {
-      addToast('Harap hubungkan wallet', 'error', 'top-right');
-      return;
-    }
-    if (!address) return;
-
-    if (!amountStr || !priceStr) {
-      addToast('Amount and Limit Price must be filled first', 'error', 'top-right');
-      return;
-    }
-
-    try {
-      setTxState('awaiting_approval');
-      setTxError('');
-
-      const fxrpAmount = parseEther(amountStr);
-      const limitPrice = parseEther(priceStr);
-
-      if (fxrpAmount <= 0n || limitPrice <= 0n) {
-        throw new Error('Amounts must be greater than zero');
-      }
-
-      const expiry = BigInt(Math.floor(Date.now() / 1000) + Number.parseInt(expiryHours) * 3600);
-      const nonce = BigInt(Math.floor(Math.random() * 1000000));
-      const chainId = 114n; // Coston2
-      const orderId = stringToHex(`order-${Date.now()}-${Math.floor(Math.random() * 1000)}`, { size: 32 });
-
-      let tokenIn: `0x${string}`;
-      let tokenOut: `0x${string}`;
-      let amountIn: bigint;
-      let orderSide: OrderSide;
-
-      if (mode === 'buy') {
-        orderSide = OrderSide.buy;
-        tokenIn = usdt0Address;
-        tokenOut = fxrpAddress;
-        amountIn = (fxrpAmount * limitPrice) / 10n ** 18n; // Quote amount we put in
-      } else {
-        orderSide = OrderSide.sell;
-        tokenIn = fxrpAddress;
-        tokenOut = usdt0Address;
-        amountIn = fxrpAmount; // Base amount we put in
-      }
-
-      const order: Order = {
-        orderId,
-        maker: address,
-        side: orderSide,
-        tokenIn,
-        tokenOut,
-        amountIn,
-        limitPrice,
-        orderType: OrderType.limit,
-        stopPrice: 0n,
-        expiry: Number(expiry),
-        nonce,
-        chainId: Number(chainId),
-        vaultAddress
-      };
-
-      const ciphertext = hashOrder(order);
-
-      const commitHash = await writeCommitOrder({
-        address: vaultAddress,
-        abi: vaultAbi,
-        functionName: 'commitOrder',
-        args: [
-          orderId,
-          orderSide === OrderSide.buy ? 0 : 1, // 0 for buy, 1 for sell
-          tokenIn,
-          amountIn,
-          ciphertext as `0x${string}`,
-          expiry
-        ]
-      });
-
-      setTxHash(commitHash);
-      setTxState('pending');
-
-      saveOrderToHistory({
-        orderId,
-        side: orderSide === OrderSide.buy ? 0 : 1,
-        tokenIn,
-        amountIn,
-        expiry: Number(expiry),
-        txHash: commitHash,
-        timestamp: Date.now(),
-        status: 'pending'
-      });
-
-      // Simulate success
-      setTimeout(() => {
-        setTxState('success');
-        setAmountStr('');
-        setPriceStr('');
-        refetch();
-        addToast('Order successfully submitted! (Top Right)', 'success', 'top-right');
-        addToast('Order successfully submitted! (Bottom Center)', 'success', 'bottom-center');
-      }, 1500);
-
-    } catch (err: any) {
-      setTxState('error');
-      setTxError(err.message || 'Failed to submit order');
+    if (!isConnected) { addToast('Harap hubungkan wallet', 'error', 'top-right'); return; }
+    if (!amountStr || !priceStr) { addToast('Amount and Limit Price must be filled first', 'error', 'top-right'); return; }
+    if (await submit(mode, amountStr, priceStr, expiryHours)) {
+      setAmountStr(''); setPriceStr(''); setSliderVal(0);
+      addToast('Order successfully submitted!', 'success', 'top-right');
     }
   };
 
@@ -312,7 +199,7 @@ export function ClassicTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
               <span>🛡️</span> Privacy Notice
             </h4>
             <p style={{ margin: '0 0 10px 0', fontSize: '11px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-              All orders are encrypted using FTSOv2 Confidential Compute. Unmatched orders, including price, size, and expiry, remain confidential and are never revealed on-chain.
+              local_mock stores a public on-chain hash commitment and sends a maker-signed plaintext payload to the local matcher. Encryption or a production TEE is not active.
             </p>
             <Link href="/how-it-works" style={{ color: 'var(--color-accent-primary)', fontSize: '11px', textDecoration: 'none', fontWeight: 600 }}>Learn more about Privara privacy ↗</Link>
           </div>
@@ -349,12 +236,12 @@ export function ClassicTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
           <div className={isMobile ? "grid-1" : "grid-2"} style={{ gap: '16px', marginBottom: '16px' }}>
             {/* Amount */}
             <div>
-              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '8px' }}>I want to {mode === 'buy' ? 'buy' : 'sell'}</div>
+              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '8px' }}>{mode === 'buy' ? 'Maximum budget' : 'I want to sell'}</div>
               <div style={{ display: 'flex', alignItems: 'center', background: 'var(--color-overlay-input)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '10px 12px' }}>
-                <input type="text" placeholder="0.00" value={amountStr} onChange={e => setAmountStr(e.target.value)} style={{ background: 'transparent', border: 'none', color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 600, width: '100%', outline: 'none' }} />
+                <input type="text" placeholder="0.00" value={amountStr} onChange={e => { setAmountStr(e.target.value); setSliderVal(0); }} style={{ background: 'transparent', border: 'none', color: 'var(--color-text-primary)', fontSize: '1.2rem', fontWeight: 600, width: '100%', outline: 'none' }} />
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--color-bg-base)', padding: '6px 10px', borderRadius: '6px', fontSize: '12px', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                  <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: '#0055ff', color: '#fff', fontSize: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>X</div>
-                  <span style={{ fontWeight: 600 }}>FXRP</span>
+                  <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: '#0055ff', color: '#fff', fontSize: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>{mode === 'buy' ? 'T' : 'X'}</div>
+                  <span style={{ fontWeight: 600 }}>{mode === 'buy' ? 'USDT0' : 'FXRP'}</span>
                   <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', marginLeft: '2px' }}>▾</span>
                 </div>
               </div>
@@ -414,7 +301,7 @@ export function ClassicTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
                 }}
                 title="Click to view Privacy & Encryption Details"
               >
-                <span style={{ fontSize: '13px', fontWeight: 600 }}>Fully Encrypted</span> 
+                <span style={{ fontSize: '13px', fontWeight: 600 }}>Signed local_mock commitment</span>
                 <span style={{ 
                   background: 'rgba(0, 231, 223, 0.15)', 
                   width: '20px', 
@@ -438,10 +325,10 @@ export function ClassicTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
               className={mode === 'buy' ? 'btn-premium-buy' : 'btn-premium-sell'}
               style={{ width: '100%', padding: '14px', fontSize: '1.1rem', gap: '8px' }}
             >
-              {txState === 'awaiting_approval' ? 'Confirm in Wallet...' : txState === 'pending' ? 'Submitting...' : 'Review & Submit Encrypted Order'}
+              {txState === 'awaiting_approval' ? 'Confirm in Wallet...' : txState === 'pending' ? 'Submitting...' : 'Review & Submit Private Order'}
             </button>
             <div style={{ textAlign: 'center', color: 'var(--color-accent-primary)', fontSize: '11px', marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-              <span>🛡️</span> Your order terms, size, and identity are confidential until a match is made.
+              <span>🛡️</span> local_mock: the matcher receives your signed plaintext order; the chain stores its hash commitment.
             </div>
           </div>
 
@@ -456,8 +343,8 @@ export function ClassicTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
               <span>📈</span> Live FTSOv2 Reference Price
             </h3>
             <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>FXRP / USDT0 <span style={{ background: 'rgba(150,0,255,0.2)', color: '#d080ff', padding: '2px 6px', borderRadius: '4px', marginLeft: '4px' }}>FTSOv2</span></div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-text-primary)' }}>0.9753 <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontWeight: 400 }}>USDT0</span></div>
-            <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>≈ $0.9753 USD</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-text-primary)' }}>{priceFormatted} <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontWeight: 400 }}>USDT0</span></div>
+            <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Live FTSOv2 reference</div>
 
             {/* Fake SVG Chart */}
             <div style={{ height: '60px', marginTop: '16px', borderBottom: '1px solid var(--color-border)', position: 'relative' }}>
@@ -570,10 +457,10 @@ export function ClassicTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
               <div className="hide-mobile how-it-works-line" style={{ position: 'absolute', top: '20px', left: '10%', right: '10%', height: '1px', borderTop: '2px dashed var(--color-border)', zIndex: 0 }}></div>
               
               {[
-                { num: 1, title: 'Deposit', icon: '💰', desc: 'Deposit FXRP or USDT0 into your non-custodial Privara vault.' },
-                { num: 2, title: 'Encrypt Order', icon: '🔒', desc: 'Create your order with price and quantity limits. Terms are encrypted.' },
-                { num: 3, title: 'Match', icon: '🤝', desc: 'The match engine privately compares orders and returns only a match result.' },
-                { num: 4, title: 'Settle', icon: '🛡️', desc: 'Smart contracts settle the trade on Flare Coston2. Funds move, privacy stays.' }
+                { num: 1, title: 'Deposit', icon: '💰', desc: 'Deposit test-only FXRP or USDT0 into PrivaraVault V2 on Coston2; balances and transfers are public.' },
+                { num: 2, title: 'Commit Order', icon: '🔒', desc: 'Sign a canonical plaintext order payload and commit its hash on-chain. Hashing is not encryption.' },
+                { num: 3, title: 'Local-Mock Match', icon: '🤝', desc: 'The disclosed local matcher verifies and compares signed plaintext payloads.' },
+                { num: 4, title: 'Settle', icon: '🛡️', desc: 'The vault verifies the signed result and FTSOv2 guard, then settles publicly on Coston2.' }
               ].map(s => (
                 <div key={s.num} className="how-it-works-step hiw-neobrutalism" style={{ 
                   background: 'var(--color-bg-glass)', 
@@ -608,21 +495,21 @@ export function ClassicTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
               ))}
             </div>
 
-            {/* ─── ENCRYPTED ORDERS DEMO ─── */}
+            {/* ─── COMMITTED ORDERS DEMO ─── */}
             <div className="encrypted-orders-section" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', marginTop: '2.5rem' }}>
               {/* Buy Orders */}
               <div className="encrypted-order-card hiw-neobrutalism" style={{ '--hover-color': '#00bfb8', background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '20px', backdropFilter: 'blur(12px)', boxShadow: '0 4px 20px rgba(0, 191, 184, 0.05)' } as React.CSSProperties}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                   <span style={{ fontSize: '20px' }}>🛒</span>
-                  <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--color-text-primary)' }}>Encrypted Buy Orders</h3>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--color-text-primary)' }}>Committed Buy Orders</h3>
                 </div>
                 <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
                   <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse', minWidth: '400px' }}>
                     <thead>
                       <tr style={{ color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)' }}>
                         <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>#</th>
-                        <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Encrypted Price ⓘ</th>
-                        <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Encrypted Size ⓘ</th>
+                        <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Limit Bound ⓘ</th>
+                        <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Public Amount ⓘ</th>
                         <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Expiry ⓘ</th>
                         <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Status</th>
                       </tr>
@@ -635,8 +522,8 @@ export function ClassicTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
                       ].map(row => (
                         <tr key={row.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                           <td style={{ padding: '12px 4px' }}>{row.id}</td>
-                          <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}>🔒 Encrypted</td>
-                          <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}>🔒 Encrypted</td>
+                          <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}>Not in event</td>
+                          <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}>Public on-chain</td>
                           <td style={{ padding: '12px 4px', color: 'var(--color-text-muted)' }}>{row.exp}</td>
                           <td style={{ padding: '12px 4px', color: '#00e676', fontWeight: 600 }}>●Active</td>
                         </tr>
@@ -646,7 +533,7 @@ export function ClassicTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '14px', background: 'rgba(0, 191, 184, 0.08)', borderRadius: '12px', border: '1px solid rgba(0, 191, 184, 0.2)' }}>
                   <span style={{ fontSize: '18px', lineHeight: 1 }}>🛡️</span>
-                  <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>All order details are encrypted and confidential until a match occurs.</span>
+                  <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>The limit bound is omitted from the OrderCommitted event, but the local_mock matcher receives the signed plaintext payload; side, amount, maker, and expiry are public.</span>
                 </div>
               </div>
 
@@ -654,15 +541,15 @@ export function ClassicTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
               <div className="encrypted-order-card hiw-neobrutalism" style={{ '--hover-color': '#e62058', background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: '16px', padding: '20px', backdropFilter: 'blur(12px)', boxShadow: '0 4px 20px rgba(230, 32, 88, 0.05)' } as React.CSSProperties}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                   <span style={{ fontSize: '20px' }}>🛒</span>
-                  <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--color-text-primary)' }}>Encrypted Sell Orders</h3>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--color-text-primary)' }}>Committed Sell Orders</h3>
                 </div>
                 <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
                   <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse', minWidth: '400px' }}>
                     <thead>
                       <tr style={{ color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)' }}>
                         <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>#</th>
-                        <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Encrypted Price ⓘ</th>
-                        <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Encrypted Size ⓘ</th>
+                        <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Limit Bound ⓘ</th>
+                        <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Public Amount ⓘ</th>
                         <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Expiry ⓘ</th>
                         <th style={{ textAlign: 'left', padding: '10px 4px', fontWeight: 600 }}>Status</th>
                       </tr>
@@ -675,8 +562,8 @@ export function ClassicTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
                       ].map(row => (
                         <tr key={row.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                           <td style={{ padding: '12px 4px' }}>{row.id}</td>
-                          <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}>🔒 Encrypted</td>
-                          <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}>🔒 Encrypted</td>
+                          <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}>Not in event</td>
+                          <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}>Public on-chain</td>
                           <td style={{ padding: '12px 4px', color: 'var(--color-text-muted)' }}>{row.exp}</td>
                           <td style={{ padding: '12px 4px', color: '#ff4d4d', fontWeight: 600 }}>●Active</td>
                         </tr>
@@ -686,7 +573,7 @@ export function ClassicTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '14px', background: 'rgba(230, 32, 88, 0.08)', borderRadius: '12px', border: '1px solid rgba(230, 32, 88, 0.2)' }}>
                   <span style={{ fontSize: '18px', lineHeight: 1 }}>🛡️</span>
-                  <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>Unmatched order terms remain confidential and are never revealed on-chain.</span>
+                  <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>The plaintext limit bound is not emitted in OrderCommitted, while order metadata remains public and the disclosed local matcher can read the signed payload.</span>
                 </div>
               </div>
             </div>
@@ -694,29 +581,29 @@ export function ClassicTrade({ viewToggle }: { viewToggle?: React.ReactNode }) {
         </div>
       )}
 
-      {/* PRIVACY & ENCRYPTION DIALOG MODAL */}
-      <Modal isOpen={showPrivacyModal} onClose={() => setShowPrivacyModal(false)} title="🔒 Privara Order Encryption Details">
+      {/* PRIVACY BOUNDARY DIALOG MODAL */}
+      <Modal isOpen={showPrivacyModal} onClose={() => setShowPrivacyModal(false)} title="Privara V2 Privacy Boundaries">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', color: 'var(--color-text-primary)' }}>
           <div style={{ padding: '14px', background: 'rgba(0, 231, 223, 0.08)', border: '1px solid rgba(0, 231, 223, 0.25)', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span style={{ fontSize: '24px' }}>🛡️</span>
             <div>
-              <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--color-accent-primary)' }}>End-to-End Order Privacy</div>
-              <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>Your limit price, quantity, side, and identity are fully encrypted.</div>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--color-accent-primary)' }}>Commitment Prototype on Coston2</div>
+              <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>Hashing is not encryption. Current order metadata and settlement remain public.</div>
             </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
               <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>
-              <div><strong>Client-Side Encryption:</strong> Order terms are encrypted before leaving your browser using cryptographic commitment.</div>
+              <div><strong>Signed payload and commitment:</strong> The browser signs a canonical plaintext payload and commits its hash on-chain.</div>
             </div>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
               <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>
-              <div><strong>Confidential Matching:</strong> Executed via Flare Confidential Compute (FCC / MPC enclave)—orders are compared without revealing limits to peers or MEV bots.</div>
+              <div><strong>Current matcher:</strong> The disclosed local_mock adapter receives and compares signed plaintext payloads. Official FCC/TEE execution is roadmap work.</div>
             </div>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
               <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>
-              <div><strong>Zero On-Chain Exposure:</strong> Unmatched orders remain 100% private. Only successful match settlements are published on Coston2 Testnet.</div>
+              <div><strong>Public metadata:</strong> Maker, side, token, amount, commitment hash, expiry, timing, and settlement are public or derivable on Coston2.</div>
             </div>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
               <div style={{ color: 'var(--color-accent-primary)', fontWeight: 700, flexShrink: 0 }}>✓</div>

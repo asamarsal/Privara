@@ -35,6 +35,30 @@ describe("Candidate Selector", () => {
     expect(result!.sell.orderId).toBe("sell2");
   });
 
+  it("should skip orders without payloads instead of starving valid candidates", () => {
+    const orderBook: OrderBook = new Map();
+    const expiry = Date.now() / 1000 + 3600;
+
+    orderBook.set("orphan-buy", { orderId: "orphan-buy", maker: "m1", side: 0, tokenIn: "t1", amountIn: 1n, encryptedCommitment: "0x1", expiry, blockNumber: 1, logIndex: 0 });
+    orderBook.set("buy-with-payload", { orderId: "buy-with-payload", maker: "m1", side: 0, tokenIn: "t1", amountIn: 1n, encryptedCommitment: "0x2", expiry, blockNumber: 2, logIndex: 0 });
+    orderBook.set("sell-with-payload", { orderId: "sell-with-payload", maker: "m1", side: 1, tokenIn: "t1", amountIn: 1n, encryptedCommitment: "0x3", expiry, blockNumber: 3, logIndex: 0 });
+
+    const payloadIds = new Set(["buy-with-payload", "sell-with-payload"]);
+    const result = selectCandidatePair(orderBook, new Set(), orderId => payloadIds.has(orderId));
+
+    expect(result?.buy.orderId).toBe("buy-with-payload");
+    expect(result?.sell.orderId).toBe("sell-with-payload");
+  });
+
+  it("should return null when only orphaned orders could form a pair", () => {
+    const orderBook: OrderBook = new Map();
+    const expiry = Date.now() / 1000 + 3600;
+    orderBook.set("buy", { orderId: "buy", maker: "m1", side: 0, tokenIn: "t1", amountIn: 1n, encryptedCommitment: "0x1", expiry, blockNumber: 1, logIndex: 0 });
+    orderBook.set("orphan-sell", { orderId: "orphan-sell", maker: "m1", side: 1, tokenIn: "t1", amountIn: 1n, encryptedCommitment: "0x2", expiry, blockNumber: 2, logIndex: 0 });
+
+    expect(selectCandidatePair(orderBook, new Set(), orderId => orderId === "buy")).toBeNull();
+  });
+
   it("should ignore expired orders", () => {
     const orderBook: OrderBook = new Map();
     const pastExpiry = Date.now() / 1000 - 3600;

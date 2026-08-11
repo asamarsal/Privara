@@ -1,68 +1,40 @@
-import { AbiCoder, getBytes, keccak256 } from 'ethers';
-import { Order, OrderSide, MatchResult } from '../schemas';
+import { AbiCoder, getBytes, id, keccak256 } from 'ethers';
+import { MatchResult, Order, OrderSide } from '../schemas';
 
 const abiCoder = AbiCoder.defaultAbiCoder();
+export const MATCH_RESULT_V2_DOMAIN = id('PRIVARA_MATCH_RESULT_V2');
+export const MATCH_ID_V2_DOMAIN = id('PRIVARA_MATCH_ID_V2');
 
-/**
- * Encodes an order into a Uint8Array (bytes) using standard ABI encoding.
- * Deterministic for given Order fields.
- */
 export function encodeOrderForHashing(order: Order): Uint8Array {
   const sideUint8 = order.side === OrderSide.buy ? 0 : 1;
-  const encodedHex = abiCoder.encode(
+  return getBytes(abiCoder.encode(
     ['bytes32', 'address', 'uint8', 'address', 'address', 'uint256', 'uint256', 'uint8', 'uint256', 'uint64', 'uint256', 'uint256', 'address'],
-    [
-      order.orderId,
-      order.maker,
-      sideUint8,
-      order.tokenIn,
-      order.tokenOut,
-      order.amountIn,
-      order.limitPrice,
-      order.orderType ?? 0,
-      order.stopPrice ?? 0n,
-      order.expiry,
-      order.nonce,
-      order.chainId,
-      order.vaultAddress
-    ]
-  );
-  return getBytes(encodedHex);
+    [order.orderId, order.maker, sideUint8, order.tokenIn, order.tokenOut, order.amountIn, order.limitPrice, order.orderType, order.stopPrice, order.expiry, order.nonce, order.chainId, order.vaultAddress]
+  ));
 }
 
-/**
- * Hashes the encoded order bytes using keccak256.
- */
 export function hashOrder(order: Order): string {
-  const encoded = encodeOrderForHashing(order);
-  return keccak256(encoded);
+  return keccak256(encodeOrderForHashing(order));
 }
 
-/**
- * Encodes a MatchResult into a Uint8Array (bytes) using standard ABI encoding.
- */
+export function computeOrderCommitment(order: Order): string {
+  return hashOrder(order);
+}
+
+export function computeMatchId(result: Omit<MatchResult, 'matchId'>): string {
+  return keccak256(abiCoder.encode(
+    ['bytes32', 'bytes32', 'bytes32', 'bytes32', 'bytes32', 'uint256', 'uint256', 'uint256', 'uint64', 'uint256', 'address'],
+    [MATCH_ID_V2_DOMAIN, result.buyOrderId, result.sellOrderId, result.buyCommitment, result.sellCommitment, result.executionPrice, result.fxrpAmount, result.quoteAmount, result.expiry, result.chainId, result.vaultAddress]
+  ));
+}
+
 export function encodeMatchResultForHashing(result: MatchResult): Uint8Array {
-  const encodedHex = abiCoder.encode(
-    ['bytes32', 'bytes32', 'bytes32', 'uint256', 'uint256', 'uint256', 'uint64', 'uint256', 'address'],
-    [
-      result.matchId,
-      result.buyOrderId,
-      result.sellOrderId,
-      result.executionPrice,
-      result.fxrpAmount,
-      result.quoteAmount,
-      result.expiry,
-      result.chainId,
-      result.vaultAddress
-    ]
-  );
-  return getBytes(encodedHex);
+  return getBytes(abiCoder.encode(
+    ['bytes32', 'bytes32', 'bytes32', 'bytes32', 'bytes32', 'bytes32', 'uint256', 'uint256', 'uint256', 'uint64', 'uint256', 'address'],
+    [MATCH_RESULT_V2_DOMAIN, result.matchId, result.buyOrderId, result.sellOrderId, result.buyCommitment, result.sellCommitment, result.executionPrice, result.fxrpAmount, result.quoteAmount, result.expiry, result.chainId, result.vaultAddress]
+  ));
 }
 
-/**
- * Hashes the encoded MatchResult bytes using keccak256.
- */
 export function hashMatchResult(result: MatchResult): string {
-  const encoded = encodeMatchResultForHashing(result);
-  return keccak256(encoded);
+  return keccak256(encodeMatchResultForHashing(result));
 }

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { deployment } from '../config/deployment';
 
 export type StateType = 'idle' | 'awaiting_approval' | 'pending' | 'success' | 'error';
 
@@ -23,7 +24,7 @@ export const TransactionState: React.FC<Props> = ({ state, txHash, errorMessage 
 
   if (!mounted || state === 'idle' || closed) return null;
 
-  const explorerUrl = process.env.NEXT_PUBLIC_COSTON2_EXPLORER_URL || 'https://coston2-explorer.flare.network';
+  const explorerUrl = deployment.explorerUrl;
   const txLink = txHash ? `${explorerUrl}/tx/${txHash}` : undefined;
 
   return createPortal(

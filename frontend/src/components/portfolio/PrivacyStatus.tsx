@@ -21,12 +21,14 @@ export const PrivacyStatus: React.FC = () => {
               ⓘ
             </span>
           </h3>
-          <span style={{ color: 'var(--color-success)', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ color: 'var(--color-success)' }}>✓</span> All Systems Secure</span>
+          <span style={{ color: 'var(--color-success)', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ color: 'var(--color-success)' }}>●</span> Local Mock / Testnet</span>
         </div>
 
         <div style={{ display: 'flex', gap: '12px' }}>
           <div style={{ flex: 1, background: 'rgba(0, 231, 223, 0.05)', border: '1px solid rgba(0, 231, 223, 0.2)', borderRadius: '8px', padding: '12px', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-            <div style={{ color: '#00e7df', fontSize: '18px' }}>🔒</div>
+            <div style={{ color: '#00e7df', fontSize: '18px', display: 'flex', alignItems: 'center' }}>
+              <img src="/icon/lockicon.png" alt="Lock" style={{ width: '18px', height: '18px', objectFit: 'contain' }} />
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-primary)' }}>Confidential Matching</span>
               <span style={{ fontSize: '11px', color: 'var(--color-success)', fontWeight: 600 }}>Active</span>
@@ -34,7 +36,9 @@ export const PrivacyStatus: React.FC = () => {
           </div>
 
           <div style={{ flex: 1, background: 'rgba(168, 85, 247, 0.05)', border: '1px solid rgba(168, 85, 247, 0.2)', borderRadius: '8px', padding: '12px', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-            <div style={{ color: '#a855f7', fontSize: '18px' }}>🔒</div>
+            <div style={{ color: '#a855f7', fontSize: '18px', display: 'flex', alignItems: 'center' }}>
+              <img src="/icon/lockicon.png" alt="Lock" style={{ width: '18px', height: '18px', objectFit: 'contain' }} />
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-primary)' }}>Data Encryption</span>
               <span style={{ fontSize: '11px', color: 'var(--color-success)', fontWeight: 600 }}>Active</span>
@@ -77,14 +81,14 @@ export const PrivacyStatus: React.FC = () => {
               fontSize: '20px',
               flexShrink: 0
             }}>
-              🔒
+              <img src="/icon/lockicon.png" alt="Lock" style={{ width: '20px', height: '20px', objectFit: 'contain' }} />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#00e7df' }}>
-                Flare Confidential Compute Engine
+                FCC Integration Architecture
               </h4>
               <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
-                Active privacy systems protecting your orders, prices, and account identity from MEV exploitation.
+                Current execution uses a disclosed local mock; production confidential hardware and account-identity privacy are not active.
               </p>
             </div>
           </div>
@@ -94,9 +98,9 @@ export const PrivacyStatus: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', fontSize: '13px', lineHeight: 1.5 }}>
               <span style={{ color: '#00e7df', fontWeight: 700, fontSize: '15px', flexShrink: 0 }}>✓</span>
               <div>
-                <strong style={{ color: 'var(--color-text-primary)' }}>Confidential Matching Enclave: </strong>
+                <strong style={{ color: 'var(--color-text-primary)' }}>Local-Mock Matcher: </strong>
                 <span style={{ color: 'var(--color-text-secondary)' }}>
-                  Orders are evaluated in a secure MPC / TEE enclave on Flare without exposing order terms.
+                  Orders are currently evaluated by a disclosed local mock adapter; no production TEE is active.
                 </span>
               </div>
             </div>
@@ -104,9 +108,9 @@ export const PrivacyStatus: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', fontSize: '13px', lineHeight: 1.5 }}>
               <span style={{ color: '#00e7df', fontWeight: 700, fontSize: '15px', flexShrink: 0 }}>✓</span>
               <div>
-                <strong style={{ color: 'var(--color-text-primary)' }}>Local Data Encryption: </strong>
+                <strong style={{ color: 'var(--color-text-primary)' }}>Signed Payload and Hash Commitment: </strong>
                 <span style={{ color: 'var(--color-text-secondary)' }}>
-                  All order details (price, size, side) are encrypted client-side in your browser before broadcast.
+                  The browser signs a canonical payload and commits its hash. Side, size, wallet, and expiry remain public.
                 </span>
               </div>
             </div>
@@ -116,7 +120,7 @@ export const PrivacyStatus: React.FC = () => {
               <div>
                 <strong style={{ color: 'var(--color-text-primary)' }}>FTSOv2 Manipulation Guard: </strong>
                 <span style={{ color: 'var(--color-text-secondary)' }}>
-                  Real-time decentralized price feeds guarantee fair execution prices for settled trades.
+                  FTSOv2 provides an on-chain reference guard; settlements outside the configured 2% threshold revert.
                 </span>
               </div>
             </div>
