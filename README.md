@@ -8,6 +8,20 @@
 
 Privara is a Coston2 intent-matching and oracle-guarded settlement MVP for a demo FXRP/USDT0 pair. Users deposit test assets, commit a hash of a maker-signed order payload, and settle compatible orders through `PrivaraVault V2`. Settlement verifies an EIP-191 match signature and rejects execution prices that deviate by more than 200 basis points from Flare FTSOv2 XRP/USD.
 
+## Screenshots
+
+<p align="center">
+  <img src="public/dashboard.png" width="800" alt="Dashboard">
+</p>
+
+<p align="center">
+  <img src="public/trade.png" width="800" alt="Trade">
+</p>
+
+<p align="center">
+  <img src="public/howprivaraworks.png" width="800" alt="How Privara Works">
+</p>
+
 ## Current status
 
 - Network: **Flare Coston2**, chain ID `114`.
