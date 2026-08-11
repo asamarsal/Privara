@@ -37,10 +37,10 @@ const FAQCard = ({ faq, isOpen, onToggle }: { faq: any; isOpen: boolean; onToggl
           {isOpen ? '▲' : '▼'}
         </div>
       </div>
-      
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateRows: isOpen ? '1fr' : '0fr', 
+
+      <div style={{
+        display: 'grid',
+        gridTemplateRows: isOpen ? '1fr' : '0fr',
         transition: 'grid-template-rows 0.3s ease',
       }}>
         <div style={{ overflow: 'hidden' }}>
@@ -194,7 +194,7 @@ export default function HowItWorksPage() {
             accentColor: '#00bfb8', accentAlpha: 'rgba(0,191,184,',
           },
           {
-            step: 5, title: 'On-Chain Settlement', icon: '⛓️',
+            step: 5, title: 'Onchain Settlement', icon: '⛓️',
             desc: 'Smart contract securely settles FXRP and USDT0 on Flare (Coston2) — verifiable and final.',
             privacyType: 'public', privacyTitle: 'Visible on-chain',
             privacyDesc: 'Settlement tx hash, assets, amounts, and counterparties',
@@ -419,7 +419,7 @@ export default function HowItWorksPage() {
             ))}
           </div>
 
-          {/* On-Chain Settlement label */}
+          {/* Onchain Settlement label */}
           <div style={{ marginTop: '32px', display: 'flex', justifyContent: 'center' }}>
             <div style={{
               display: 'flex', alignItems: 'center', gap: '8px',
@@ -430,7 +430,7 @@ export default function HowItWorksPage() {
               color: 'var(--color-accent-primary)', fontSize: '13px', fontWeight: 600,
             }}>
               <span style={{ fontSize: '16px' }}>⛓️</span>
-              On-Chain Settlement (Coston2)
+              Onchain Settlement (Coston2)
             </div>
           </div>
 
@@ -462,11 +462,11 @@ export default function HowItWorksPage() {
             icon: '📈',
           }
         ].map((faq, idx) => (
-          <FAQCard 
-            key={idx} 
-            faq={faq} 
-            isOpen={!!openCards[idx]} 
-            onToggle={() => setOpenCards(prev => ({ ...prev, [idx]: !prev[idx] }))} 
+          <FAQCard
+            key={idx}
+            faq={faq}
+            isOpen={!!openCards[idx]}
+            onToggle={() => setOpenCards(prev => ({ ...prev, [idx]: !prev[idx] }))}
           />
         ))}
       </div>

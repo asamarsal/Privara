@@ -395,7 +395,7 @@ export default function Home() {
           { title: 'Private Orders', icon: '/icon/lockicon.png', desc: 'Limit-price payloads are hash-committed; current Coston2 metadata and settlement remain public.' },
           { title: 'Confidential Matching', icon: '🛡️', desc: 'Flare Confidential Compute privately compares orders and returns only a match result—never the terms.' },
           { title: 'FTSOv2 Price Guard', icon: '📊', desc: 'FTSOv2 provides decentralized, manipulation-resistant pricing to protect fair settlement.' },
-          { title: 'On-Chain Settlement', icon: '✅', desc: 'Smart contracts securely settle FXRP and USDT0 on Flare Coston2—verifiable and final.' }
+          { title: 'Onchain Settlement', icon: '✅', desc: 'Smart contracts securely settle FXRP and USDT0 on Flare Coston2—verifiable and final.' }
         ].map(f => (
           <div key={f.title} className="feature-card hiw-neobrutalism" style={{
             flex: '1 1 220px',
@@ -503,8 +503,8 @@ export default function Home() {
                   ].map(row => (
                     <tr key={row.id} className="table-row-hover" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                       <td style={{ padding: '12px 4px' }}>{row.id}</td>
-<td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Not in event</span></td>
-                       <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Public on-chain</span></td>
+                      <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Not in event</span></td>
+                      <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Public on-chain</span></td>
                       <td style={{ padding: '12px 4px', color: 'var(--color-text-muted)' }}>{row.exp}</td>
                       <td style={{ padding: '12px 4px', color: '#00e676', fontWeight: 600 }}>●Active</td>
                     </tr>
@@ -543,8 +543,8 @@ export default function Home() {
                   ].map(row => (
                     <tr key={row.id} className="table-row-hover" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                       <td style={{ padding: '12px 4px' }}>{row.id}</td>
-<td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Not in event</span></td>
-                       <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Public on-chain</span></td>
+                      <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Not in event</span></td>
+                      <td style={{ padding: '12px 4px', color: 'var(--color-text-secondary)' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>Public on-chain</span></td>
                       <td style={{ padding: '12px 4px', color: 'var(--color-text-muted)' }}>{row.exp}</td>
                       <td style={{ padding: '12px 4px', color: '#ff4d4d', fontWeight: 600 }}>●Active</td>
                     </tr>
