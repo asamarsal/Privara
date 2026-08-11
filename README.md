@@ -166,8 +166,8 @@ Repository/access status as of 2026-08-11: the GitHub repository is public and c
 ## Submission links
 
 - Repository: `https://github.com/asamarsal/Privara`
-- Live application: `[WAJIB DIISI: LIVE_APP_URL]`
+- Live application: `https://privara-dapps.vercel.app/`
 - Demo video: `[WAJIB DIISI: DEMO_VIDEO_URL]`
-- Exact official bounty: `[WAJIB DIISI: BOUNTY_NAME]`
+- Exact official bounty: `Track 2 - Confidential Compute Apps.`
 
 Privara is a hackathon demonstration on Flare Coston2. It must not be used with real funds.
