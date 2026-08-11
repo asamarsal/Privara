@@ -2,7 +2,7 @@
   <img src="frontend/public/icon/privarawithtext-icon.png" width="350" alt="Privara Logo">
 </p>
 
-# Privara
+# Privara (privara-dapps.vercel.app)
 
 > **Private orders. Fair settlement.**
 
