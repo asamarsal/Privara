@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="frontend/public/icon/privarawithtext-icon.png" width="350" alt="Privara Logo">
+</p>
+
 # Privara
 
 > **Private orders. Fair settlement.**
