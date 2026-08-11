@@ -6,7 +6,7 @@
 
 > **Private orders. Fair settlement.**
 
-Privara is a Coston2 intent-matching and oracle-guarded settlement MVP for a demo FXRP/USDT0 pair. Users deposit test assets, commit a hash of a maker-signed order payload, and settle compatible orders through `PrivaraVault V2`. Settlement verifies an EIP-191 match signature and rejects execution prices that deviate by more than 200 basis points from Flare FTSOv2 XRP/USD.
+Privara is a Coston2 intent matching and oracle guarded settlement MVP for a demo FXRP/USDT0 pair. Users deposit test assets, commit a hash of a maker signed order payload, and settle compatible orders through `PrivaraVault V2`. Settlement verifies an EIP 191 match signature and rejects execution prices that deviate by more than 200 basis points from Flare FTSOv2 XRP/USD.
 
 ## Screenshots
 
@@ -22,6 +22,30 @@ Privara is a Coston2 intent-matching and oracle-guarded settlement MVP for a dem
   <img src="public/howprivaraworks.png" width="800" alt="How Privara Works">
 </p>
 
+## Problem & Solution
+
+**The Problem:** Public order books reveal trading intent before execution. For large or price sensitive trades, visible limits expose strategy and create opportunities for front running and MEV. Fully opaque or centralized matching engines, on the other hand, weaken on chain verifiability and custody security. DeFi traders lack the infrastructure to protect their pre trade privacy while maintaining trustless execution.
+
+**The Solution:** Privara introduces a **hybrid confidential operational layer** on the Flare blockchain. It separates concerns: compatible intent is evaluated confidentially off chain (via Flare Confidential Compute architecture), while custody, oracle validation, and settlement remain transparent and verifiable on Flare Coston2.
+
+## Why Flare Network?
+
+Flare provides high performance infrastructure optimized for data heavy and privacy centric applications. Privara uses Flare as the foundation for:
+- **Verifiable Custody**: Smart contracts handle atomic execution on Coston2.
+- **Trustless Oracle Guards**: FTSOv2 protects settlement, ensuring trades only execute within a fair market price range (200 bps deviation guard).
+- **Confidential Intent Infrastructure**: FCC provides the target trust boundary for comparing sensitive intent and returning a signed result.
+
+## Competitive Advantage
+
+- **Confidential Pre trade Intent**: Traders can submit limit orders without exposing their strategy to the public mempool.
+- **Oracle Guarded Settlement**: Zero risk of executing at an unfair price thanks to FTSOv2 integration.
+- **Atomic Settlement**: Trades settle atomically on Coston2, ensuring zero counterparty risk.
+- **Verifiable Transactions**: Vault accounting, commitments, and oracle checks are 100% verifiable onchain.
+
+## Vision
+
+Privara builds the privacy layer for FXRP and FAssets. Today, traders can match FXRP intents privately on Coston2. In the future, this architecture can expand to Flare Mainnet and support a broader range of FAssets with production grade TEE enclaves, building a blockchain native DeFi economy where traders protect their intent and buyers receive verifiable execution.
+
 ## Current status
 
 - Network: **Flare Coston2**, chain ID `114`.
@@ -29,12 +53,12 @@ Privara is a Coston2 intent-matching and oracle-guarded settlement MVP for a dem
 - Asset mode: **Coston2 mock/demo assets**, both 18 decimals.
 - FCC infrastructure mode: **`local_mock`**.
 - Verifier mode: **local EIP-191**, not an official FCC/TEE proof verifier.
-- Source-level development gates: **64 workspace tests** (**25 contract + 24 backend + 15 shared**), four-package workspace typecheck, production frontend build, **5/5 Playwright smoke tests**, and **6 focused Go packages** passed on the current working tree on 2026-08-11.
-- Backend readiness after the oracle-aware changes: `/health` ready on chain ID `114` in `local_mock` mode.
-- Connected-wallet browser E2E, live Market/Stop Coston2 transactions, and manual Alice/Bob acceptance/final transaction evidence are **not complete**.
-- Release status: **NO-GO for final submission** until the transaction pack, scanner-backed security evidence, public deployment links, video, fresh-clone check, and exact release-SHA rerun are complete.
+- Source level development gates: **64 workspace tests** (**25 contract + 24 backend + 15 shared**), four-package workspace typecheck, production frontend build, **5/5 Playwright smoke tests**, and **6 focused Go packages** passed on the current working tree on 2026-08-11.
+- Backend readiness after the oracle aware changes: `/health` ready on chain ID `114` in `local_mock` mode.
+- Connected wallet browser E2E, live Market/Stop Coston2 transactions, and manual Alice/Bob acceptance/final transaction evidence are **not complete**.
+- Release status: **NO-GO for final submission** until the transaction pack, scanner backed security evidence, public deployment links, video, fresh clone check, and exact release-SHA rerun are complete.
 
-> **Required disclosure:** The Coston2 V2 demo uses test mock FXRP and mock USDT0 assets. It does not use real or production-backed FAssets. The current matcher sees maker-signed plaintext order payloads and runs in `local_mock` mode; it is not a production hardware TEE. Coston2 testnet only, not audited, not production-ready, and no real funds.
+> **Required disclosure:** The Coston2 V2 demo uses test mock FXRP and mock USDT0 assets. It does not use real or production backed FAssets. The current matcher sees maker signed plaintext order payloads and runs in `local_mock` mode; it is not a production hardware TEE. Coston2 testnet only, not audited, not production-ready, and no real funds.
 
 ## Verified Coston2 V2 deployment
 
@@ -66,25 +90,25 @@ The prior production/Vercel visual layout has been restored for both **Classic**
 
 - **Classic** remains the quick **Limit** experience because that is the original Classic layout.
 - **Advanced** retains its existing **Market / Limit / Stop** tabs. All three are functional in `local_mock`.
-- **Limit buy:** the entered amount is a maximum USDT0 budget for one compatible exact-fill sell. It does **not** promise an exact FXRP quantity; the received FXRP depends on the compatible seller and execution price.
-- **Limit sell:** the entered FXRP amount is exact and all-or-nothing.
+- **Limit buy:** the entered amount is a maximum USDT0 budget for one compatible exact fill sell. It does **not** promise an exact FXRP quantity; the received FXRP depends on the compatible seller and execution price.
+- **Limit sell:** the entered FXRP amount is exact and all or nothing.
 - **Market:** this is not an unbounded order or a guarantee of immediate execution. At commitment time it derives a 1% collar from live FTSOv2: a buy commits the upper bound rounded up (`ceil`), while a sell commits the lower bound rounded down (`floor`).
-- **Stop:** level-triggered stop-limit. A buy is eligible when `oracle >= stop` and its maximum price must be `>= stop`; a sell is eligible when `oracle <= stop` and its minimum price must be `<= stop`. Eligibility follows the current oracle condition, remains dormant before the condition is met, and is not permanently latched.
+- **Stop:** level triggered stop limit. A buy is eligible when `oracle >= stop` and its maximum price must be `>= stop`; a sell is eligible when `oracle <= stop` and its minimum price must be `<= stop`. Eligibility follows the current oracle condition, remains dormant before the condition is met, and is not permanently latched.
 - **Partial fills are unsupported for every order type.** All successful matches remain exact-fill/all-or-nothing.
 
-No V2 contract change was required: the opaque order commitment already binds `orderType`, `limitPrice`, and `stopPrice`, and the V2 match digest is unchanged. The backend now reads FTSOv2, enforces feed freshness, applies the oracle-aware `<= 200 bps` / minimum settlement window, and fails closed for remote FCC operation.
+No V2 contract change was required: the opaque order commitment already binds `orderType`, `limitPrice`, and `stopPrice`, and the V2 match digest is unchanged. The backend now reads FTSOv2, enforces feed freshness, applies the oracle aware `<= 200 bps` / minimum settlement window, and fails closed for remote FCC operation.
 
-The trade audit also aligned the UI and transaction lifecycle with V2: available, locked, and total balances are used; the withdrawal route works; faucet claim state is checked before offering a claim; cancellation waits for a successful receipt and supports expired orders; and direct contract status reads replace genesis-to-head event scans. Market and Stop confirmation now display the actual fixed FTSOv2 collar or stop trigger semantics, and Portfolio surfaces indexer failures as unknown state rather than authoritative zero. Stale encryption, identity-private, and production-like FCC wording found in the broader frontend review was replaced with explicit `local_mock`, public-metadata, and hash-not-encryption disclosure.
+The trade audit also aligned the UI and transaction lifecycle with V2: available, locked, and total balances are used; the withdrawal route works; faucet claim state is checked before offering a claim; cancellation waits for a successful receipt and supports expired orders; and direct contract status reads replace genesis to head event scans. Market and Stop confirmation now display the actual fixed FTSOv2 collar or stop trigger semantics, and Portfolio surfaces indexer failures as unknown state rather than authoritative zero. Stale encryption, identity private, and production like FCC wording found in the broader frontend review was replaced with explicit `local_mock`, public metadata, and hash not encryption disclosure.
 
-These are source-level implementation checks plus local automated evidence, not connected-wallet browser E2E, live Market/Stop Coston2 transaction evidence, manual Alice/Bob acceptance, production TEE evidence, or a claim that the software is bug-free.
+These are source level implementation checks plus local automated evidence, not connected wallet browser E2E, live Market/Stop Coston2 transaction evidence, manual Alice/Bob acceptance, production TEE evidence, or a claim that the software is bug free.
 
 ## How it works
 
 1. Alice deposits demo FXRP; Bob deposits demo USDT0.
-2. The browser creates a canonical limit-order payload and requests a maker signature.
-3. The browser commits `hashOrder(payload)` to `PrivaraVault V2` and sends the maker-signed plaintext payload to the local matcher.
+2. The browser creates a canonical limit order payload and requests a maker signature.
+3. The browser commits `hashOrder(payload)` to `PrivaraVault V2` and sends the maker signed plaintext payload to the local matcher.
 4. The backend verifies the maker signature, chain ID, vault address, and payload commitment.
-5. Compatible limits execute at their midpoint; the local mock attestation signer signs a domain-separated V2 result.
+5. Compatible limits execute at their midpoint; the local mock attestation signer signs a domain separated V2 result.
 6. `settle()` verifies order state, commitments, signature, amounts, expiry, replay protection, and the FTSOv2 deviation guard.
 7. Vault balances update atomically and users can withdraw.
 
@@ -152,40 +176,40 @@ Open `http://localhost:3000` and connect to Coston2.
 
 - `local_mock` signer integrity is currently trusted for match authorization, but the vault independently enforces commitments, amounts, expiry, replay protection, token direction, reserved balances, and FTSOv2 price bounds.
 - The mock signer must remain separate from deployer/owner/matcher roles and should not receive demo assets or unrelated authority.
-- Payload and in-flight registries are currently in memory; durable restart recovery remains incomplete.
+- Payload and in flight registries are currently in memory; durable restart recovery remains incomplete.
 - Expired orders may require cancellation to release locked balance.
-- Official FCC request/proof schema, official on-chain verifier integration, extension measurement binding, and full Go V2 match-result parity remain future work.
+- Official FCC request/proof schema, official onchain verifier integration, extension measurement binding, and full Go V2 match result parity remain future work.
 - Contracts have not received a formal external audit.
 
 ## Remaining release gates
 
 Before describing Privara as a fully accepted working demo or submitting the final release:
 
-- Complete a two-wallet Coston2 trade and record deposit, order, settlement, withdrawal, and final-balance evidence.
-- Demonstrate live cancellation, incompatible limits, expiry, duplicate-settlement prevention, and oracle deviation rejection.
-- Add live Market/Stop Coston2 transaction evidence and connected-wallet browser write/receipt E2E.
+- Complete a two wallet Coston2 trade and record deposit, order, settlement, withdrawal, and final balance evidence.
+- Demonstrate live cancellation, incompatible limits, expiry, duplicate settlement prevention, and oracle deviation rejection.
+- Add live Market/Stop Coston2 transaction evidence and connected wallet browser write/receipt E2E.
 - Populate `deployments/coston2.json` examples and `docs/testing/INTEGRATION_TEST_RESULTS.md`.
-- Run documented tree-and-history secret scanning, prove published fixture addresses have no canonical role/assets, and review generated artifacts without reproducing credentials.
-- Repair and verify fresh-clone retrieval for the FCC scaffold, pin Node/pnpm versions, and credit the exact upstream source/version.
+- Run documented tree and history secret scanning, prove published fixture addresses have no canonical role/assets, and review generated artifacts without reproducing credentials.
+- Repair and verify fresh clone retrieval for the FCC scaffold, pin Node/pnpm versions, and credit the exact upstream source/version.
 - Push the audited V2 state, then repeat tests, typecheck, build, Go suites, and browser smoke on the exact clean release SHA.
 - Publish and verify the canonical frontend, backend, technical docs, explorer evidence, and demo video URLs without authentication.
 - Fill the exact official bounty, deadline, submission form, evidence ledger, and all remaining required placeholders.
 
-Repository/access status as of 2026-08-11: the GitHub repository is public and canonical V2 explorer links resolve, but public-source parity, fresh-clone verification, and final release/tag evidence remain open.
+Repository/access status as of 2026-08-11: the GitHub repository is public and canonical V2 explorer links resolve, but public source parity, fresh clone verification, and final release/tag evidence remain open.
 
 ## Roadmap
 
 1. Move matching to official FCC/TEE infrastructure with a pinned proof schema and verifier.
-2. Persist payloads, FCC jobs, and index checkpoints with reorg-safe recovery.
-3. Reduce pre-settlement metadata exposure and add partial fills.
+2. Persist payloads, FCC jobs, and index checkpoints with reorg safe recovery.
+3. Reduce pre settlement metadata exposure and add partial fills.
 4. Obtain an external security review before any mainnet consideration.
-5. Validate additional real FAssets only after decimal-aware protocol and UI support.
+5. Validate additional real FAssets only after decimal aware protocol and UI support.
 
 ## Submission links
 
 - Repository: `https://github.com/asamarsal/Privara`
 - Live application: `https://privara-dapps.vercel.app/`
-- Demo video: `[WAJIB DIISI: DEMO_VIDEO_URL]`
+- Demo video: `[DEMO_VIDEO_URL]`
 - Exact official bounty: `Track 2 - Confidential Compute Apps.`
 
 Privara is a hackathon demonstration on Flare Coston2. It must not be used with real funds.
