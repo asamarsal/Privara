@@ -2,11 +2,17 @@
   <img src="frontend/public/icon/privarawithtext-icon.png" width="350" alt="Privara Logo">
 </p>
 
-# Privara ([Link](https://privara-dapps.vercel.app))
+# Privara — Confidential Darkpool DEX on Flare ([Link](https://privara-dapps.vercel.app))
 
 > **Private orders. Fair settlement.**
 
-Privara is a Coston2 intent matching and oracle guarded settlement MVP for a demo FXRP/USDT0 pair. Users deposit test assets, commit a hash of a maker signed order payload, and settle compatible orders through `PrivaraVault V2`. Settlement verifies an EIP 191 match signature and rejects execution prices that deviate by more than 200 basis points from Flare FTSOv2 XRP/USD.
+Privara is a confidential darkpool DEX built on Flare for traders who want to execute FXRP trades without exposing their unmatched order terms to the public market.
+
+Traditional on-chain order books expose information such as price limits, order sizes, and trading intent before settlement. For large traders, this information can become a signal for bots, MEV strategies, front-running, and other forms of adverse execution. Privara changes this model by separating confidential order matching from transparent on-chain settlement.
+
+> *Keep trading intent private before a match, while keeping final settlement verifiable on-chain.*
+
+The current Coston2 MVP is an intent matching and oracle guarded settlement prototype for a demo FXRP/USDT0 pair. Users deposit test assets, commit a hash of a maker signed order payload, and settle compatible orders through `PrivaraVault V2`. Settlement verifies an EIP 191 match signature and rejects execution prices that deviate by more than 200 basis points from Flare FTSOv2 XRP/USD.
 
 ## Screenshots
 
@@ -44,7 +50,18 @@ Flare provides high performance infrastructure optimized for data heavy and priv
 
 ## Vision
 
-Privara builds the privacy layer for FXRP and FAssets. Today, traders can match FXRP intents privately on Coston2. In the future, this architecture can expand to Flare Mainnet and support a broader range of FAssets with production grade TEE enclaves, building a blockchain native DeFi economy where traders protect their intent and buyers receive verifiable execution.
+Privara builds the privacy layer for FXRP and FAssets. Today, traders can match FXRP intents privately on Coston2. 
+
+Our long-term vision is to make Flare a settlement layer for confidential institutional markets. The same architecture could eventually support:
+- larger FXRP block trades,
+- OTC-style execution,
+- RFQ markets,
+- institutional treasury trades,
+- confidential token swaps,
+- private auctions,
+- and cross-asset darkpool liquidity.
+
+Privara demonstrates how Flare Confidential Compute, FTSOv2, smart contracts, and XRP-related assets can work together to create a new category of privacy-preserving DeFi infrastructure.
 
 ## Current status
 
@@ -112,9 +129,70 @@ These are source level implementation checks plus local automated evidence, not 
 6. `settle()` verifies order state, commitments, signature, amounts, expiry, replay protection, and the FTSOv2 deviation guard.
 7. Vault balances update atomically and users can withdraw.
 
-### What is public
+### Example Trade
 
-Wallet addresses, deposits, withdrawals, order side, token, amount, expiry, commitment hash, and settlement details are public or recoverable from Coston2 data. The commitment is a hash, not encryption. Privara currently aims to avoid publishing the plaintext limit price in an order book before matching; it does not provide wallet anonymity or private settlement.
+**Alice** wants to sell 100 FXRP with a minimum acceptable price of 0.90 USDT0.
+**Bob** wants to buy 100 FXRP with a maximum acceptable price of 1.00 USDT0.
+
+Privara confidentially compares their limits. Because `0.90 <= 1.00`, the orders match.
+- **Execution price:** (0.90 + 1.00) / 2 = 0.95 USDT0 per FXRP
+- **Total settlement:** 100 × 0.95 = 95 USDT0
+
+Privara then checks the execution price against FTSOv2. If the oracle guard passes:
+- Bob receives 100 FXRP
+- Alice receives 95 USDT0
+
+The trade is finalized and settled on-chain.
+
+### What Makes Privara Different?
+
+Privara is not intended to be another AMM or public order-book DEX. It explores a completely different market structure:
+
+**Public DEX**
+> Public Order → Public Matching → Public Settlement
+
+**Privara**
+> Private Order → Confidential Matching → Oracle Validation → Public Settlement
+
+The important innovation is not hiding blockchain settlement. It is preventing sensitive trading intent from becoming public before a trade has been executed.
+
+### Architecture
+
+Privara consists of several cooperating layers:
+
+```text
+User
+ ↓
+Privara Web App
+ ↓
+Privara Vault Smart Contract
+ ↓
+Private / Encrypted Order
+ ↓
+Privara Match Engine
+ ↓
+Flare Confidential Compute
+ ↓
+FTSOv2 Price Validation
+ ↓
+On-Chain FXRP / USDT0 Settlement
+```
+
+Each component has a different responsibility. The blockchain secures funds and settlement. Confidential computation protects trading intent. FTSOv2 protects settlement pricing.
+
+### Privacy Model
+
+Privara does not attempt to hide everything on the blockchain. Instead, it focuses privacy where it matters most for trading.
+
+Before settlement, Privara is designed to protect information such as:
+- buyer maximum price
+- seller minimum price
+- unmatched order conditions
+- the relationship between potential counterparties
+
+After settlement, blockchain information such as transactions, transferred assets, and settlement details can still be independently verified. This creates a practical balance between confidentiality before execution and verifiability after execution.
+
+(Note: For the current Coston2 demo, the commitment is a hash, not encryption, and it runs in `local_mock` mode. It does not provide wallet anonymity or fully private production settlement yet.)
 
 ## Repository structure
 

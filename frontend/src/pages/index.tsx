@@ -392,10 +392,10 @@ export default function Home() {
         alignItems: 'stretch'
       }}>
         {[
-          { title: 'Private Orders', icon: '/icon/lockicon.png', desc: 'Limit-price payloads are hash-committed; current Coston2 metadata and settlement remain public.' },
-          { title: 'Confidential Matching', icon: '🛡️', desc: 'Flare Confidential Compute privately compares orders and returns only a match result—never the terms.' },
-          { title: 'FTSOv2 Price Guard', icon: '📊', desc: 'FTSOv2 provides decentralized, manipulation-resistant pricing to protect fair settlement.' },
-          { title: 'Onchain Settlement', icon: '✅', desc: 'Smart contracts securely settle FXRP and USDT0 on Flare Coston2—verifiable and final.' }
+          { title: 'Private Orders', icon: '/icon/icon-lock.png', desc: 'Limit-price payloads are hash-committed; current Coston2 metadata and settlement remain public.' },
+          { title: 'Confidential Matching', icon: '/icon/icon-matching.png', desc: 'Flare Confidential Compute privately compares orders and returns only a match result—never the terms.' },
+          { title: 'FTSOv2 Price Guard', icon: '/icon/icon-shieldcheckmark.png', desc: 'FTSOv2 provides decentralized, manipulation-resistant pricing to protect fair settlement.' },
+          { title: 'Onchain Settlement', icon: '/icon/icon-blockchain.png', desc: 'Smart contracts securely settle FXRP and USDT0 on Flare Coston2—verifiable and final.' }
         ].map(f => (
           <div key={f.title} className="feature-card hiw-neobrutalism" style={{
             flex: '1 1 220px',
