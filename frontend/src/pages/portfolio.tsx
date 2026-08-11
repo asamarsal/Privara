@@ -40,10 +40,6 @@ export default function PortfolioPage() {
     }
   };
 
-  if (!isConnected) {
-    return <div className="page-container" style={{ textAlign: 'center', paddingTop: '80px' }}><h2>Connect Your Wallet</h2><p style={{ color: 'var(--color-text-secondary)' }}>Connect on Coston2 to view and manage vault balances.</p></div>;
-  }
-
   return (
     <>
       <div className="page-container">
@@ -60,6 +56,13 @@ export default function PortfolioPage() {
           Manage Vault
         </button>
       </div>
+
+      {!isConnected && (
+        <div role="status" style={{ marginBottom: '16px', padding: '12px 16px', border: '1px solid var(--color-warning)', borderRadius: '10px', background: 'var(--color-warning-bg)', color: 'var(--color-text-secondary)', fontSize: '13px', lineHeight: 1.5 }}>
+          <strong style={{ color: 'var(--color-text-primary)' }}>Wallet not connected.</strong>{' '}
+          You can explore the Portfolio dashboard and vault forms in read-only mode. Connect a wallet on Coston2 to load account-specific balances, orders, history, and submit deposit or withdrawal transactions.
+        </div>
+      )}
 
       {portfolioError && (
         <div role="alert" style={{ marginBottom: '16px', padding: '12px 14px', borderRadius: '10px', border: '1px solid var(--color-error)', background: 'var(--color-error-bg)', color: 'var(--color-text-secondary)', display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' }}>

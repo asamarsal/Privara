@@ -79,12 +79,16 @@ export const WithdrawalForm: React.FC<{ initialToken?: 'FXRP' | 'USDT0' }> = ({ 
   };
 
   const handleWithdraw = async () => {
+    if (!address || !isCorrectNetwork || !publicClient) {
+      setTxState('error');
+      setTxError('Connect a wallet on Coston2');
+      return;
+    }
     const parsedAmount = validateInput(amountStr);
     if (!parsedAmount) return;
 
     try {
       if (!isAuditedV2Deployment) throw new Error('Writes are disabled until PrivaraVault V2 is deployed on Coston2');
-      if (!address || !isCorrectNetwork || !publicClient) throw new Error('Connect a wallet on Coston2');
       setTxState('awaiting_approval');
       setTxError('');
       setTxHash(undefined);
@@ -163,7 +167,7 @@ export const WithdrawalForm: React.FC<{ initialToken?: 'FXRP' | 'USDT0' }> = ({ 
         className="btn-premium-sell"
         style={{ width: '100%', padding: '14px', fontSize: '15px' }}
         onClick={handleWithdraw}
-        disabled={!isAuditedV2Deployment || !address || !amountStr || !!error || !isCorrectNetwork || isLoading || isError || txState === 'awaiting_approval' || txState === 'pending' || availableBalance === undefined || availableBalance === 0n}
+        disabled={!isAuditedV2Deployment || (!!address && (!amountStr || !!error || isLoading || isError || availableBalance === undefined || availableBalance === 0n)) || txState === 'awaiting_approval' || txState === 'pending'}
       >
         Withdraw {token}
       </button>

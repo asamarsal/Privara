@@ -93,6 +93,11 @@ export const DepositForm: React.FC<{ initialToken?: 'FXRP' | 'USDT0' }> = ({ ini
   };
 
   const handleDeposit = async () => {
+    if (!address || !isCorrectNetwork || !publicClient) {
+      setTxState('error');
+      setTxError('Connect a wallet on Coston2');
+      return;
+    }
     const parsedAmount = validateInput(amountStr);
     if (!parsedAmount) return;
 
@@ -102,7 +107,6 @@ export const DepositForm: React.FC<{ initialToken?: 'FXRP' | 'USDT0' }> = ({ ini
       setTxHash(undefined);
 
       if (!isAuditedV2Deployment) throw new Error('Writes are disabled until PrivaraVault V2 is deployed on Coston2');
-      if (!address || !isCorrectNetwork || !publicClient) throw new Error('Connect a wallet on Coston2');
       // 1. Approve and wait for confirmation if necessary.
       if (currentAllowance === undefined || currentAllowance < parsedAmount) {
         const approveHash = await writeApprove({
@@ -193,7 +197,7 @@ export const DepositForm: React.FC<{ initialToken?: 'FXRP' | 'USDT0' }> = ({ ini
         className="btn-premium-buy"
         style={{ width: '100%', padding: '14px', fontSize: '15px' }}
         onClick={handleDeposit}
-        disabled={!isAuditedV2Deployment || !address || !amountStr || !!error || !isCorrectNetwork || txState === 'awaiting_approval' || txState === 'pending'}
+        disabled={!isAuditedV2Deployment || (!!address && (!amountStr || !!error)) || txState === 'awaiting_approval' || txState === 'pending'}
       >
         Deposit {token}
       </button>
