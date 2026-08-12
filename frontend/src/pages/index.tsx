@@ -407,8 +407,8 @@ export default function Home() {
             flexDirection: 'column',
             gap: '12px',
           }}>
-            <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(0,231,223,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', border: '1px solid rgba(0,231,223,0.2)' }}>
-              {f.icon.startsWith('/') ? <img src={f.icon} alt="Icon" style={{ width: '20px', height: '20px', objectFit: 'contain' }} /> : f.icon}
+            <div style={{ display: 'flex', alignItems: 'center', fontSize: '18px' }}>
+              {f.icon.startsWith('/') ? <img src={f.icon} alt="Icon" style={{ width: '32px', height: '32px', objectFit: 'contain' }} /> : f.icon}
             </div>
             <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
               <h3 style={{ margin: '0 0 6px 0', fontSize: '1rem' }}>{f.title}</h3>
