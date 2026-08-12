@@ -12,9 +12,6 @@ if (typeof window !== 'undefined') {
 export default function Home() {
   const { isMobile, isTablet } = useWindowSize();
   const containerRef = useRef<HTMLDivElement>(null);
-  const orb1Ref = useRef<HTMLDivElement>(null);
-  const orb2Ref = useRef<HTMLDivElement>(null);
-  const orb3Ref = useRef<HTMLDivElement>(null);
 
   const [typedTitle, setTypedTitle] = useState('');
   const fullTitle = "Trade FXRP without exposing your unmatched order terms.";
@@ -145,46 +142,10 @@ export default function Home() {
       clearProps: 'transform,opacity',
     });
 
-    // 7. Floating orb animations (homepage only, infinite loop)
-    if (orb1Ref.current) {
-      gsap.to(orb1Ref.current, {
-        x: 120,
-        y: 100,
-        duration: 12,
-        ease: 'sine.inOut',
-        repeat: -1,
-        yoyo: true,
-      });
-    }
-    if (orb2Ref.current) {
-      gsap.to(orb2Ref.current, {
-        x: -140,
-        y: -110,
-        duration: 15,
-        ease: 'sine.inOut',
-        repeat: -1,
-        yoyo: true,
-      });
-    }
-    if (orb3Ref.current) {
-      gsap.to(orb3Ref.current, {
-        x: -100,
-        y: 130,
-        duration: 10,
-        ease: 'sine.inOut',
-        repeat: -1,
-        yoyo: true,
-      });
-    }
   }, { scope: containerRef });
 
   return (
     <div ref={containerRef} style={{ display: 'flex', flexDirection: 'column', gap: '3.5rem', paddingBottom: '2rem' }}>
-
-      {/* ─── Homepage-only animated background orbs ─── */}
-      <div ref={orb1Ref} style={{ position: 'fixed', top: '-200px', left: '-200px', width: '700px', height: '700px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,85,255,0.18) 0%, transparent 65%)', pointerEvents: 'none', zIndex: 0, willChange: 'transform' }} />
-      <div ref={orb2Ref} style={{ position: 'fixed', bottom: '-200px', right: '-150px', width: '650px', height: '650px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,85,255,0.15) 0%, transparent 65%)', pointerEvents: 'none', zIndex: 0, willChange: 'transform' }} />
-      <div ref={orb3Ref} style={{ position: 'fixed', top: '40%', right: '-100px', width: '500px', height: '500px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(168,85,247,0.12) 0%, transparent 65%)', pointerEvents: 'none', zIndex: 0, willChange: 'transform' }} />
 
       {/* ─── HERO SECTION ─── */}
       <section className={isMobile ? "" : "grid-2"} style={{

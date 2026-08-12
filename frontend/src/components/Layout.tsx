@@ -28,6 +28,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const { isMobile } = useWindowSize();
   const router = useRouter();
   const footerRef = useRef<HTMLElement>(null);
+  const orb1Ref = useRef<HTMLDivElement>(null);
+  const orb2Ref = useRef<HTMLDivElement>(null);
+  const orb3Ref = useRef<HTMLDivElement>(null);
 
   useGSAP(() => {
     if (!footerRef.current) return;
@@ -138,10 +141,19 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     }
   }, [isMobileMenuOpen]);
 
+  useGSAP(() => {
+    if (orb1Ref.current) gsap.to(orb1Ref.current, { x: 120, y: 100, duration: 12, ease: 'sine.inOut', repeat: -1, yoyo: true });
+    if (orb2Ref.current) gsap.to(orb2Ref.current, { x: -140, y: -110, duration: 15, ease: 'sine.inOut', repeat: -1, yoyo: true });
+    if (orb3Ref.current) gsap.to(orb3Ref.current, { x: -100, y: 130, duration: 10, ease: 'sine.inOut', repeat: -1, yoyo: true });
+  }, []);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', position: 'relative' }}>
 
-      {/* ─── Background orbs moved to index.tsx (homepage only) ─── */}
+      {/* ─── Global animated background orbs ─── */}
+      <div ref={orb1Ref} style={{ position: 'fixed', top: '-200px', left: '-200px', width: '700px', height: '700px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,85,255,0.18) 0%, transparent 65%)', pointerEvents: 'none', zIndex: 0, willChange: 'transform' }} />
+      <div ref={orb2Ref} style={{ position: 'fixed', bottom: '-200px', right: '-150px', width: '650px', height: '650px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,85,255,0.15) 0%, transparent 65%)', pointerEvents: 'none', zIndex: 0, willChange: 'transform' }} />
+      <div ref={orb3Ref} style={{ position: 'fixed', top: '40%', right: '-100px', width: '500px', height: '500px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(168,85,247,0.12) 0%, transparent 65%)', pointerEvents: 'none', zIndex: 0, willChange: 'transform' }} />
 
       <TestnetWarning />
       <WrongNetworkBanner />
