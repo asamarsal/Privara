@@ -2,7 +2,7 @@
   <img src="frontend/public/icon/privarawithtext-icon.png" width="350" alt="Privara Logo">
 </p>
 
-# Privara — Confidential Darkpool DEX on Flare ([Link](https://privara-dapps.vercel.app))
+# Privara — Confidential Darkpool DEX on Flare ([Link](https://privara.my.id))
 
 > **Private orders. Fair settlement.**
 
