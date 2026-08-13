@@ -98,10 +98,26 @@ export class Indexer {
   }
 
   private async syncRange(from: number, to: number): Promise<void> {
-    for (let start = from; start <= to; start += 30) {
-      const end = Math.min(start + 29, to);
-      for (const event of await this.events(start, end)) await this.applyEvent(event);
-      this.lastPolledBlock = end; // incremental: a later failure resumes at the first unprocessed chunk
+    const CHUNK_SIZE = 30;
+    const BATCH_SIZE = 35;
+    let current = from;
+    while (current <= to) {
+      const batchPromises = [];
+      const batchRanges = [];
+      for (let i = 0; i < BATCH_SIZE && current <= to; i++) {
+        const start = current;
+        const end = Math.min(start + CHUNK_SIZE - 1, to);
+        batchRanges.push({ start, end });
+        batchPromises.push(this.events(start, end));
+        current = end + 1;
+      }
+      const batchResults = await Promise.all(batchPromises);
+      for (let i = 0; i < batchResults.length; i++) {
+        for (const event of batchResults[i]) {
+          await this.applyEvent(event);
+        }
+        this.lastPolledBlock = batchRanges[i].end;
+      }
     }
   }
 
