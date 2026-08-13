@@ -287,7 +287,7 @@ Repository/access status as of 2026-08-11: the GitHub repository is public and c
 ## Submission links
 
 - Repository: `https://github.com/asamarsal/Privara`
-- Live application: `https://privara-dapps.vercel.app/`
+- Live application: `https://privara.my.id/`
 - Demo video: `[DEMO_VIDEO_URL]`
 - Exact official bounty: `Track 2 - Confidential Compute Apps.`
 
