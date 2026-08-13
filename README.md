@@ -71,7 +71,7 @@ Privara demonstrates how Flare Confidential Compute, FTSOv2, smart contracts, an
 - FCC infrastructure mode: **`local_mock`**.
 - Verifier mode: **local EIP-191**, not an official FCC/TEE proof verifier.
 - Source level development gates: **64 workspace tests** (**25 contract + 24 backend + 15 shared**), four-package workspace typecheck, production frontend build, **5/5 Playwright smoke tests**, and **6 focused Go packages** passed on the current working tree on 2026-08-11.
-- Backend readiness after the oracle aware changes: `/health` ready on chain ID `114` in `local_mock` mode.
+- Backend readiness: Live VPS deployment active at `https://api.privara.my.id` (`/health` ready on chain ID `114` in `local_mock` mode).
 - Connected wallet browser E2E, live Market/Stop Coston2 transactions, and manual Alice/Bob acceptance/final transaction evidence are **not complete**.
 - Release status: **NO-GO for final submission** until the transaction pack, scanner backed security evidence, public deployment links, video, fresh clone check, and exact release-SHA rerun are complete.
 
@@ -81,13 +81,14 @@ Privara demonstrates how Flare Confidential Compute, FTSOv2, smart contracts, an
 
 Canonical source: [`deployments/coston2.json`](deployments/coston2.json).
 
-| Component | Address | Evidence |
+| Component | Address / Endpoint | Evidence |
 |---|---|---|
 | PrivaraVault V2 | `0x295ACfEce01513a360EA54768eB6efAf337a303E` | [Explorer](https://coston2-explorer.flare.network/address/0x295ACfEce01513a360EA54768eB6efAf337a303E) |
 | Local EIP-191 verifier | `0xa05A5c13A3206B1b357EE2F7C576790428690992` | [Explorer](https://coston2-explorer.flare.network/address/0xa05A5c13A3206B1b357EE2F7C576790428690992) |
 | Demo FXRP, 18 decimals | `0x883610C496161486b73412083073126d36167377` | [Explorer](https://coston2-explorer.flare.network/address/0x883610C496161486b73412083073126d36167377) |
 | Demo USDT0, 18 decimals | `0x9d361B93A298CEe2bd3Ad85318EC82efe1aFdaC2` | [Explorer](https://coston2-explorer.flare.network/address/0x9d361B93A298CEe2bd3Ad85318EC82efe1aFdaC2) |
 | FTSOv2 | `0x3d893C53D9e8056135C26C8c638B76C8b60Df726` | [Explorer](https://coston2-explorer.flare.network/address/0x3d893C53D9e8056135C26C8c638B76C8b60Df726) |
+| Backend Matcher API | `https://api.privara.my.id` | [Health Check](https://api.privara.my.id/health) |
 
 Deployment facts:
 
